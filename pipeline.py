@@ -111,6 +111,7 @@ class InternshipDict(TypedDict, total=False):
     tags: Optional[List[str]]
     source: InternshipSource
     isActive: bool
+    bannedByCompany: Optional[bool]   # platform posts only: pulled because the company was banned (ifind companies.restriction.status)
     fingerprint: Optional[str]
     linkVerification: Optional[LinkVerificationDict]
     moderation: Optional[ModerationDict]

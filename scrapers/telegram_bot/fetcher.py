@@ -9,6 +9,7 @@ closed; the caller does not save the post in that case.
 import logging
 import re
 import time
+from urllib.parse import urljoin
 from dataclasses import dataclass
 from typing import Optional
 
@@ -47,6 +48,7 @@ class Page:
     title: str = ""
     text: str = ""
     rendered: bool = False           # True when Selenium was needed
+    image: Optional[str] = None      # the page's share image (og:image), absolute
 
 
 def html_to_text(html: str) -> tuple[str, str]:
@@ -66,6 +68,19 @@ def html_to_text(html: str) -> tuple[str, str]:
     if meta:
         text = "\n".join(dict.fromkeys(meta)) + "\n" + text
     return title, text[:MAX_TEXT_CHARS]
+
+
+def find_image(html: str, base_url: str) -> Optional[str]:
+    """The page's share image (og:image, else twitter:image) as an absolute http(s) URL."""
+    soup = BeautifulSoup(html or "", "html.parser")
+    for attr, key in (("property", "og:image"), ("name", "og:image"), ("name", "twitter:image"), ("property", "twitter:image")):
+        tag = soup.find("meta", attrs={attr: key})
+        content = (tag.get("content") or "").strip() if tag else ""
+        if content:
+            url = urljoin(base_url, content)
+            if url.startswith(("http://", "https://")) and len(url) < 1000:
+                return url
+    return None
 
 
 def _classify(page: Page) -> Page:
@@ -118,6 +133,7 @@ def fetch_page(url: str, session: Optional[requests.Session] = None) -> Page:
         resp = http.get(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "en"}, timeout=20, allow_redirects=True)
         page.status, page.final_url = resp.status_code, resp.url
         page.title, page.text = html_to_text(resp.text)
+        page.image = find_image(resp.text, resp.url)
     except requests.RequestException as exc:
         log.info("requests failed for %s: %s", url, exc)
 
@@ -128,6 +144,7 @@ def fetch_page(url: str, session: Optional[requests.Session] = None) -> Page:
             title, text = html_to_text(html)
             if len(text) > len(page.text):
                 page.title, page.text, page.final_url, page.rendered = title, text, final_url, True
+                page.image = find_image(html, final_url) or page.image
                 if page.status in BLOCKED_STATUSES:
                     page.status = 200     # the browser got through
 

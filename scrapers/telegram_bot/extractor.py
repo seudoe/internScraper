@@ -102,7 +102,7 @@ def company_from_email(link: str) -> Optional[str]:
     return domain.split(".")[0].replace("-", " ").title()
 
 
-def _cohere_llm() -> Callable[[str], str]:
+def _cohere_llm(feature: str = "extract") -> Callable[[str], str]:
     import cohere
 
     key = os.environ.get("COHERE_API_KEY")
@@ -111,7 +111,7 @@ def _cohere_llm() -> Callable[[str], str]:
     co = cohere.Client(key)
 
     def call(prompt: str) -> str:
-        return tracked_chat(co, "telegram", "extract", model=COHERE_MODEL, message=prompt, max_tokens=2500,
+        return tracked_chat(co, "telegram", feature, model=COHERE_MODEL, message=prompt, max_tokens=2500,
                             temperature=0, response_format={"type": "json_object"}).text
     return call
 

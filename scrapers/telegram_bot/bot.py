@@ -24,6 +24,7 @@ import sys
 import threading
 import time
 from collections import deque
+from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Set, Tuple
 
 import requests
@@ -31,6 +32,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 import usage_log
 
+from . import events
 from .extractor import extract_internships
 from .fetcher import Page, fetch_page
 from .parser import Post, parse_post, split_posts
@@ -45,7 +47,9 @@ REPLY_GAP_SECONDS = 0.6          # Telegram allows ~1 message/second per chat
 HELP = (
     "Send me internship posts (a WhatsApp forward, or a pasted chat export with several posts).\n"
     "I open the apply link, read the details from the page and add it to the review queue.\n"
-    "A post needs an apply link, or an email address to apply to."
+    "A post needs an apply link, or an email address to apply to.\n\n"
+    "For a hackathon or contest, start the message with EVENT and add its registration link. "
+    "I read the page and list it for students until its deadline passes."
 )
 PAGE_PROBLEMS = {
     "closed": "the posting looks closed",
@@ -202,8 +206,81 @@ def process_post(
     return lines, approved
 
 
+# ─── Events ───────────────────────────────────────────────────────────────────
+
+def push_event(event: dict, submitted_by: Optional[str] = None) -> Tuple[str, dict]:
+    """Store an event in the `events` collection. Returns ("saved"|"updated", stored document); raises on infrastructure errors."""
+    from script import _open_staging
+
+    client, staging = _open_staging()
+    try:
+        return events.save_event(staging.database[events.COLLECTION], event, submitted_by)
+    finally:
+        client.close()
+
+
+def _on(day: Optional[str]) -> str:
+    return datetime.fromisoformat(day).strftime("%d %b %Y").lstrip("0") if day else ""
+
+
+def _describe_event(kind: str, doc: dict) -> str:
+    label = f'"{doc["title"]}"' + (f' by {doc["organiser"]}' if doc.get("organiser") else "")
+    verb = "🔄 Updated event" if kind == "updated" else "🎉 Saved event"
+    if doc.get("datesKnown"):
+        last = doc.get("registrationDeadline") or doc.get("endDate") or doc.get("startDate")
+        when = f" · shown until {_on(last)}"
+    else:
+        when = f" · no dates found, shown for {events.NO_DATE_DAYS} days (resend with a Deadline: line to set one)"
+    return f"{verb}: {label}{when}"
+
+
+def process_event(
+    body: str,
+    fetch: Callable[[str], Page] = fetch_page,
+    llm: Optional[Callable[[str], str]] = None,
+    push: Callable[[dict], Tuple[str, dict]] = push_event,
+    now: Optional[datetime] = None,
+) -> List[str]:
+    """Handle one EVENT message (prefix already removed). Returns the reply lines."""
+    post = parse_post(body)
+    if not post.urls:
+        return ["❌ Not saved: no registration link in this message"]
+    if llm is None and usage_log.budget_exceeded():
+        return ["⏸️ Not processed: today's AI budget is used up. Send it again after midnight IST."]
+
+    page = fetch(post.urls[0])
+    if not page.ok:
+        if page.reason in events.DEAD_PAGE:
+            return [f"❌ Not saved: {_page_problem(page)} ({_short(post.urls[0])})"]
+        page = None      # login wall, blocked or unreachable: work from the message alone
+
+    event, error = events.extract_event(post, body, page, llm, now)
+    if error:
+        return [f"❌ Not saved: {error}"]
+    if event["datesKnown"] and event["expiresAt"] <= (now or datetime.now(timezone.utc)):
+        return [f'❌ Not saved: "{event["title"]}" has already ended']
+    try:
+        kind, doc = push(event)
+    except Exception as exc:
+        log.exception("saving event failed")
+        return [f"❌ Error saving the event: {type(exc).__name__}"]
+    return [_describe_event(kind, doc)]
+
+
 def process_message(chat_id: int, text: str) -> None:
     """Background job for one Telegram message: every post gets its own reply."""
+    body = events.strip_event_prefix(text)
+    if body is not None:
+        with _work_lock:
+            try:
+                lines = process_event(body, push=lambda ev: push_event(ev, usage_log.actor.get()))
+            except Exception as exc:
+                log.exception("event failed")
+                lines = [f"❌ Error: {type(exc).__name__}: {str(exc)[:120]}"]
+        for line in lines:
+            send_message(chat_id, line)
+        return
+
     posts = split_posts(text)
     if not posts:
         return

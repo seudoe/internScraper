@@ -21,3 +21,9 @@ services:
         sync: false           # optional shared secret for POST /process (x-api-key header)
       - key: MAIN_URL
         sync: false           # main project origin(s), comma-separated (add http://localhost:3000 for dev)
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false           # from @BotFather
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false           # random string; Telegram sends it back in a header
+      - key: TELEGRAM_ALLOWED_USER_IDS
+        sync: false           # comma-separated Telegram user ids allowed to submit

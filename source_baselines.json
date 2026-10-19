@@ -116,5 +116,18 @@
       56.62,
       21.68
     ]
+  },
+  "telegram": {
+    "count": 2,
+    "mean_completeness": 0.5625,
+    "mean_scam_score": 0.0,
+    "recent_completeness": [
+      0.75,
+      0.375
+    ],
+    "recent_scam_scores": [
+      0.0,
+      0.0
+    ]
   }
 }

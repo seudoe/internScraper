@@ -20,6 +20,7 @@ import json
 import logging
 import argparse
 from services import vectoriser_url
+from usage_log import BudgetExceeded
 import time
 from pathlib import Path
 from datetime import datetime, timezone
@@ -174,6 +175,9 @@ def run_scraper(scraper: dict, max_items: int = DEFAULT_MAX) -> tuple[list, str 
             return result, None
         log.warning("  Scraper '%s' returned unexpected type: %s", scraper["id"], type(result))
         return [], f"unexpected return type {type(result).__name__}"
+    except BudgetExceeded as e:
+        log.error("  ⏸ Scraper '%s' stopped: %s", scraper["id"], e)
+        return [], f"budget_exceeded: {e}"[:500]
     except Exception as e:
         log.error("  ❌ Scraper '%s' failed: %s", scraper["id"], e)
         return [], f"{type(e).__name__}: {e}"[:500]
@@ -267,6 +271,15 @@ class RunLog:
         except Exception as exc:
             log.warning("Run log write failed (%s)", exc)
 
+    def flag_budget_exceeded(self) -> None:
+        """The daily AI budget stopped a scraper in this run."""
+        if self.id is None:
+            return
+        try:
+            self.col.update_one({"_id": self.id}, {"$set": {"budgetExceeded": True}})
+        except Exception as exc:
+            log.warning("Run log write failed (%s)", exc)
+
     def finish(self, status: str, totals: dict, error: str | None = None) -> None:
         if self.id is None:
             return
@@ -340,6 +353,8 @@ def run_streaming(
             t0 = time.monotonic()
             items, scraper_error = run_scraper(scraper, max_items=max_items)
             scrape_s = time.monotonic() - t0
+            if scraper_error and scraper_error.startswith("budget_exceeded"):
+                runlog.flag_budget_exceeded()
 
             if not items:
                 log.warning("  No internships returned from %s", scraper["label"])

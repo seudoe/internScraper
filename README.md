@@ -148,7 +148,7 @@ exactly `true`, otherwise a clear listing comes back `pending_review` with the f
 ```
 or `"internships": [ {...}, {...} ]`. `source` defaults to `ifind` and must be one of the sources above.
 Item fields are the same loose shape the scrapers produce (`name`/`title`, `applyLink`/`apply_link`,
-`summary`/`description`, `city`/`location`, `skills`, `stipend`, `duration`, `deadline_date`, ...).
+`summary`/`description`, `city`/`location` (or `address`: a list of `{city, state, country}`), `skills`, `stipend`, `duration`, `deadline_date`, ...).
 
 Response `200`:
 
@@ -180,6 +180,33 @@ item comes back `pending_review`. `400` for an unknown source, no items, or more
   the service sleeps; staged documents in MongoDB are unaffected.
 - Concurrent `POST /scrape` calls are not blocked. Avoid starting a second job while one is running.
 
+## Addresses
+
+A listing stores its locations as `address: [{city, state, country}, ...]` (no flat `city`/`state`/`country`).
+Scrapers still produce one flat `city`; the pipeline wraps it. The dedup fingerprint uses the **first** address's city.
+Documents from before this change are converted once with `python migrate_address.py` (dry run) / `--apply`;
+run it before deploying code that reads `address`.
+
+## Telegram bot (`scrapers/telegram_bot/`)
+
+Forward internship posts (e.g. from WhatsApp) to the bot. For each post it opens the apply link, reads the details
+from the page and runs them through the same pipeline as the scrapers with `source: "telegram"`
+(`moderation.source: "community_bot"`).
+
+```
+Telegram → POST /telegram/webhook → split into posts → fetch the link (requests, Selenium if JS-rendered)
+         → Cohere extraction (page beats message) → push_to_pipeline → one reply per post
+```
+
+- A pasted WhatsApp chat export is split on its `[date, time] sender:` headers; a plain message is one post.
+- One internship per role in a post; every location goes into that internship's `address[]`.
+- Not saved (and the bot says why): page can't be loaded / login wall / closed, no company or role found, no link or email.
+- A post with only an email address is saved with `applyLink: "mailto:<address>"` (allowed for this source only). The scam
+  detector scores the email's domain; a free-mail address (gmail, ...) adds `free_email_domain` and is never auto-approved.
+- Only user ids in `TELEGRAM_ALLOWED_USER_IDS` are served.
+- Register the webhook once after deploying: `python -m scrapers.telegram_bot.bot set-webhook https://<host>/telegram/webhook`.
+- Tests: `pytest scrapers/telegram_bot/tests`. `scrapers/telegram_bot/examples.txt` (local sample messages) is gitignored.
+
 ## Environment secrets
 
 Set in the Render dashboard (**Environment**); `sync: false` entries in `render.yaml` are prompted for on first deploy:
@@ -191,6 +218,9 @@ Set in the Render dashboard (**Environment**); `sync: false` entries in `render.
 | `MAIN_URL` | optional | The main project (ifind): browser origin(s) allowed by CORS, comma-separated (e.g. `https://ifind.example.com,http://localhost:3000`). Nothing is allowed by default. The old name `MAIN_SERVER` is still read when this is unset. |
 | `FIRST_PARTY_DOMAINS` | for `/process` | iFind's own domains, comma-separated (e.g. `ifind.app`; `localhost:3000` in dev). Employer listings link to iFind itself; without this the scam detector treats that link as an off-platform domain and scores every employer post into review. Exact domain or real subdomain only. |
 | `INTERNSCRAPER_API_KEY` | optional | If set, `POST /process` requires it in the `x-api-key` header. |
+| `TELEGRAM_BOT_TOKEN` | for the Telegram bot | Token from @BotFather. |
+| `TELEGRAM_WEBHOOK_SECRET` | for the Telegram bot | Any random string. Telegram echoes it in a header; `POST /telegram/webhook` rejects requests without it (503 while unset). |
+| `TELEGRAM_ALLOWED_USER_IDS` | for the Telegram bot | Comma-separated Telegram user ids allowed to submit posts. Everyone else is ignored. |
 | `VECTORISER_URL` | recommended | Base URL of the vectoriser service (`tf-idfs+berts/vectoriser`). After a push, `POST {VECTORISER_URL}/vectorize-hnsw` vectorizes and graph-indexes auto-approved listings, and the vectoriser re-runs every student through the graph. `/process` calls `/vectorize-platform` the same way for auto-approved employer posts. Unset → they wait until the vectorizer is triggered some other way. |
 
 ## Deploying to Render

@@ -9,6 +9,7 @@ import os
 import re
 from dotenv import load_dotenv
 import cohere
+from usage_log import BudgetExceeded, tracked_chat
 from datetime import datetime
 import time
 
@@ -304,7 +305,8 @@ Generate a JSON array of objects (one per internship, in the same order) with th
 Return ONLY the JSON array, no other text."""
 
     try:
-        response = co.chat(
+        response = tracked_chat(
+            co, 'internshala', 'enrich',
             model='command-a-03-2025',
             message=prompt,
             max_tokens=1500,
@@ -327,6 +329,8 @@ Return ONLY the JSON array, no other text."""
 
         return enriched_data
 
+    except BudgetExceeded:
+        raise  # stop here: filling in generic defaults would put unenriched listings into the queue
     except Exception as e:
         print(f"Error enriching internships: {e}")
         return [

@@ -7,6 +7,7 @@ import json
 import os
 from dotenv import load_dotenv
 import cohere
+from usage_log import BudgetExceeded, tracked_chat
 from datetime import datetime
 import time
 import re
@@ -104,7 +105,8 @@ Generate a JSON array of objects with the following fields:
 Return ONLY the JSON array of objects, no other text."""
 
     try:
-        response = co.chat(
+        response = tracked_chat(
+            co, 'github', 'enrich',
             model='command-a-03-2025',
             message=prompt,
             max_tokens=1000,
@@ -129,6 +131,8 @@ Return ONLY the JSON array of objects, no other text."""
 
         return enriched_data
         
+    except BudgetExceeded:
+        raise  # stop here: filling in generic defaults would put unenriched listings into the queue
     except Exception as e:
         print(f"Error enriching internships: {e}")
         # Return default values for all internships

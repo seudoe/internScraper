@@ -36,6 +36,8 @@ GET /scrape/{job_id}
       "error": "..." | null
     }
 
+POST /telegram/webhook   (Telegram bot; see scrapers/telegram_bot/bot.py for the TELEGRAM_* settings)
+
 POST /process        (platform path: internships posted on iFind itself)
   Body:   { "source": "ifind", "internship": {...} }   or   { "source": "ifind", "internships": [{...}, ...] }
   Runs the same validation + scam detection as the scraper path and returns the verdicts.
@@ -85,6 +87,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Telegram bot (webhook): internships forwarded from WhatsApp, source "telegram"
+from scrapers.telegram_bot.bot import router as telegram_router
+app.include_router(telegram_router)
 
 # ─── In-memory job store ──────────────────────────────────────────────────────
 # { job_id: { status, started_at, finished_at, stats, error } }

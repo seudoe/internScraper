@@ -117,11 +117,13 @@ def adapt_db_doc(doc: dict[str, Any], index: int) -> dict[str, Any]:
     elif isinstance(raw_location, str):
         location = _parse_location(raw_location)
     else:
+        # Stored documents carry `address: [{city, state, country}, ...]`; the detector scores the first one
+        first = (doc.get("address") or [{}])[0] or {}
         location = {
             "isRemote": doc.get("isRemote", False),
-            "city": doc.get("city"),
-            "state": doc.get("state"),
-            "country": doc.get("country"),
+            "city": first.get("city"),
+            "state": first.get("state"),
+            "country": first.get("country"),
         }
 
     deadline = _format_date(doc.get("deadlineDate") or doc.get("apply_by") or doc.get("deadline"))

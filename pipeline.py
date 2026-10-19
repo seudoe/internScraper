@@ -83,7 +83,13 @@ class ModerationDict(TypedDict, total=False):
     scamDetails: Optional[ScamDetailsDict]
 
 
-InternshipSource = Literal["github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "ifind"]
+InternshipSource = Literal["github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "telegram", "ifind"]
+
+
+class AddressDict(TypedDict, total=False):
+    city: Optional[str]
+    state: Optional[str]
+    country: Optional[str]
 
 
 class InternshipDict(TypedDict, total=False):
@@ -94,9 +100,7 @@ class InternshipDict(TypedDict, total=False):
     applyLink: str
     datePublished: str
     deadlineDate: Optional[str]
-    country: Optional[str]
-    state: Optional[str]
-    city: Optional[str]
+    address: List["AddressDict"]
     isRemote: bool
     stipend: StipendDict
     duration: DurationDict
@@ -197,8 +201,10 @@ def normalize_stipend(raw) -> StipendDict:
 
 def normalize_location(item: dict) -> tuple[str, str, bool]:
     """Return (city, country, is_remote) from various scraper field layouts."""
+    first_addr = next((a for a in (item.get("address") or []) if isinstance(a, dict) and a.get("city")), {}) if isinstance(item.get("address"), list) else {}
     city = (
-        item.get("city")
+        first_addr.get("city")
+        or item.get("city")
         or item.get("location")
         or "remote"
     )
@@ -207,9 +213,9 @@ def normalize_location(item: dict) -> tuple[str, str, bool]:
     else:
         city = "remote"
 
-    is_remote = bool(re.search(r"remote|wfh|work from home|online", city, re.IGNORECASE))
+    is_remote = bool(re.search(r"remote|wfh|work from home|online", city, re.IGNORECASE)) or item.get("isRemote") is True
 
-    country = item.get("country") or ""
+    country = first_addr.get("country") or item.get("country") or ""
     if not country:
         if re.search(r"remote|wfh|online", city, re.IGNORECASE):
             country = ""
@@ -223,6 +229,37 @@ def normalize_location(item: dict) -> tuple[str, str, bool]:
             country = ""
 
     return city, country, is_remote
+
+
+def normalize_address(item: dict, city: str, country: str, is_remote: bool) -> list:
+    """
+    Return the `address` list: [{city, state, country}, ...].
+
+    An item that already carries `address` (list of dicts, e.g. ifind employer posts or the Telegram bot)
+    keeps every entry that has a city or state. Otherwise one entry is built from the flat
+    city/state/country fields scrapers use (`city` and `country` come from normalize_location).
+    Remote-only listings with no real location get an empty list.
+    """
+    raw = item.get("address")
+    if isinstance(raw, list):
+        out = []
+        for a in raw:
+            if not isinstance(a, dict):
+                continue
+            entry = {k: (str(a.get(k)).strip() or None) if a.get(k) else None for k in ("city", "state", "country")}
+            if entry["city"] or entry["state"]:
+                out.append(entry)
+        return out
+
+    if is_remote and not item.get("state"):
+        return []
+    state = item.get("state")
+    entry = {
+        "city": city or None,
+        "state": str(state).strip() or None if state else None,
+        "country": country or None,
+    }
+    return [entry] if entry["city"] or entry["state"] else []
 
 
 def normalize_skills(raw) -> list:
@@ -300,7 +337,7 @@ _DETECTOR_EXTRA_KEYS = (
     "triggered_rules", "top_contributing_features", "risk_breakdown",
     "hard_disqualifying_forced", "low_confidence_forced_review",
     "shared_infrastructure", "duplicate_cluster_network_size",
-    "_ix",
+    "_ix", "city", "_freeMail",
 )
 
 
@@ -351,7 +388,7 @@ def _record_saved(detail, doc, meta, flag_counts, companies) -> None:
 # ─── Sources ──────────────────────────────────────────────────────────────────
 
 # Where an internship came from: one of the scrapers, or "ifind" (posted by an employer on our own platform).
-INTERNSHIP_SOURCES = ("github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "ifind")
+INTERNSHIP_SOURCES = ("github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "telegram", "ifind")
 
 STAGING_COLLECTION = "internships.mod-unvectorised"
 LIVE_COLLECTION = "internships"
@@ -366,7 +403,9 @@ def _check_source(source: str) -> str:
 
 def _moderation_source(source: str) -> str:
     """moderation.source says how the listing arrived, not which site it came from."""
-    return "employer" if source == "ifind" else "web_scraping"
+    if source == "ifind":
+        return "employer"
+    return "community_bot" if source == "telegram" else "web_scraping"
 
 
 # ─── Pipeline stages (shared by push_to_pipeline and evaluate_internships) ────
@@ -388,6 +427,7 @@ def _prepare_candidates(items: list, source: str, is_duplicate, stats: dict, det
             apply_link = normalize_apply_link(item)
             summary    = normalize_summary(item)
             city, country, is_remote = normalize_location(item)
+            address    = normalize_address(item, city, country, is_remote)
             skills     = normalize_skills(item.get("skills"))
 
             # ── Basic validation ──────────────────────────────────────────
@@ -398,7 +438,8 @@ def _prepare_candidates(items: list, source: str, is_duplicate, stats: dict, det
                 outcomes[ix] = {"outcome": "rejected", "reason": "missing_required_fields"}
                 continue
 
-            if not apply_link.startswith("http"):
+            # Telegram posts that are applied for by email carry a mailto: link; every other source needs a URL
+            if not (apply_link.startswith("http") or (source == "telegram" and apply_link.startswith("mailto:"))):
                 log.debug("  ⚠  Skipping '%s' — invalid URL: %s", name, apply_link)
                 stats["rejected"] += 1
                 detail["rejectedBadUrl"] += 1
@@ -406,7 +447,8 @@ def _prepare_candidates(items: list, source: str, is_duplicate, stats: dict, det
                 continue
 
             # ── Deduplication ─────────────────────────────────────────────
-            fingerprint = generate_fingerprint(company, name, city)
+            # Fingerprint uses the first address's city (same value the flat `city` field used to hold)
+            fingerprint = generate_fingerprint(company, name, (address[0].get("city") if address else None) or city)
             if is_duplicate and is_duplicate(fingerprint):
                 log.debug("  ⏭  Duplicate: '%s' @ %s", name, company)
                 stats["duplicate"] += 1
@@ -447,9 +489,8 @@ def _prepare_candidates(items: list, source: str, is_duplicate, stats: dict, det
                 "company":            company,
                 "applyLink":          apply_link,
                 "summary":            summary,
-                "city":               city or None,
-                "country":            country or None,
-                "state":              item.get("state") or None,
+                "address":            address,
+                "city":               city or None,   # detector input only; dropped by _assemble_moderation
                 "isRemote":           is_remote,
                 "skills":             skills,
                 "degree":             degree,
@@ -485,8 +526,54 @@ def _prepare_candidates(items: list, source: str, is_duplicate, stats: dict, det
     return candidates
 
 
+FREE_MAIL_DOMAINS = frozenset({
+    "gmail.com", "googlemail.com", "yahoo.com", "yahoo.in", "yahoo.co.in", "outlook.com", "hotmail.com", "live.com",
+    "rediffmail.com", "icloud.com", "proton.me", "protonmail.com", "aol.com", "zoho.com", "ymail.com",
+})
+
+
+def mailto_domain(link: str) -> str:
+    """Domain of a mailto: link ("mailto:hr@foxo.club?subject=x" -> "foxo.club"), "" when it has none."""
+    addr = link[len("mailto:"):].split("?")[0].strip()
+    return addr.rsplit("@", 1)[1].lower() if "@" in addr else ""
+
+
+def _hide_mailto(candidates: list) -> dict:
+    """
+    The URL features of the scam detector expect a web link. For a mailto: apply link, score the email's
+    domain as https://<domain> instead (so it is still compared with the company name) and restore the
+    mailto: afterwards. Returns {_ix: original link}.
+    """
+    originals: dict = {}
+    for c in candidates:
+        link = c.get("applyLink") or ""
+        if link.startswith("mailto:"):
+            originals[c["_ix"]] = link
+            c["applyLink"] = f"https://{mailto_domain(link) or 'invalid.invalid'}"
+    return originals
+
+
+def _restore_mailto(docs: list, originals: dict) -> None:
+    for d in docs:
+        link = originals.get(d.get("_ix"))
+        if link:
+            d["applyLink"] = link
+            if mailto_domain(link) in FREE_MAIL_DOMAINS:
+                d["_freeMail"] = True
+
+
 def _score_candidates(candidates: list, detail: dict) -> list:
     """Stage 2: scam_detector. Fails closed: if it breaks, nothing is auto-approved."""
+    originals = _hide_mailto(candidates)
+    try:
+        scored = _run_detector(candidates, detail)
+    finally:
+        _restore_mailto(candidates, originals)
+    _restore_mailto(scored, originals)
+    return scored
+
+
+def _run_detector(candidates: list, detail: dict) -> list:
     try:
         from scam_detector.pipeline import process_records
         t0 = time.monotonic()
@@ -528,6 +615,10 @@ def _assemble_moderation(doc: dict, source: str) -> dict:
     if isinstance(doc.get("moderation"), dict):
         raw_flags = doc["moderation"].get("flags") or []
 
+    free_mail = bool(doc.get("_freeMail"))
+    if free_mail:
+        raw_flags = [*raw_flags, "free_email_domain"]
+
     scam_details: ScamDetailsDict = {
         "score":              scam_score,
         "decision":           decision if decision in ("clear", "review", "block") else "review",
@@ -539,6 +630,9 @@ def _assemble_moderation(doc: dict, source: str) -> dict:
     }
 
     mod_status = {"clear": "auto_approved", "block": "auto_rejected"}.get(decision, "pending_review")
+    # A free-mail apply address can't be tied to the company: a moderator must look, never auto-approve
+    if free_mail and mod_status == "auto_approved":
+        mod_status = "pending_review"
 
     doc["moderation"] = {
         "status":          mod_status,

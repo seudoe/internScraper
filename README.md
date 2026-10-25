@@ -4,8 +4,7 @@ FastAPI service that scrapes internship listings from 7 sources, runs them throu
 moderation pipeline (validation → dedup → scam detection) and stores them in MongoDB
 staging collection **`internships.mod-unvectorised`**.
 
-Deployed on **Render** as a Docker web service (`render.yaml`). The Dockerfile installs Chrome for the
-Selenium scrapers and listens on Render's `$PORT`.
+Deployed on **Zoho Catalyst AppSail** as a Docker image (see Deploying). The image installs Chrome for the Selenium scrapers and listens on `$PORT` (9000 on AppSail).
 
 ## Pipeline
 
@@ -237,7 +236,7 @@ Telegram → POST /telegram/webhook → split into posts → fetch the link (req
 
 ## Environment secrets
 
-Set in the Render dashboard (**Environment**); `sync: false` entries in `render.yaml` are prompted for on first deploy:
+Set in the host's environment settings (Catalyst AppSail **Environment Variable**, Render **Environment**, Oracle/Railway `.env`). A ready list is in `.env.example.oracle`:
 
 | Secret | Required | Description |
 |--------|----------|-------------|
@@ -251,21 +250,50 @@ Set in the Render dashboard (**Environment**); `sync: false` entries in `render.
 | `TELEGRAM_ALLOWED_USER_IDS` | for the Telegram bot | Comma-separated Telegram user ids allowed to submit posts. Everyone else is ignored. |
 | `VECTORISER_URL` | recommended | Base URL of the vectoriser service (`tf-idfs+berts/vectoriser`). After a push, `POST {VECTORISER_URL}/vectorize-hnsw` vectorizes and graph-indexes auto-approved listings, and the vectoriser re-runs every student through the graph. `/process` calls `/vectorize-platform` the same way for auto-approved employer posts. Unset → they wait until the vectorizer is triggered some other way. |
 
-## Deploying to Render
+## Run locally
 
-1. Push the repo to GitHub. In Render: **New + → Blueprint**, select the repo; it reads `render.yaml`
-   (or create a **Web Service** manually: Runtime *Docker*, health check path `/health`).
-2. Fill in the env vars above. Render sets `PORT` itself.
-3. After the build, check `GET /health`, then smoke test `POST /scrape` with `{"scrapers": [{"github": 5}]}`,
-   poll the job, and confirm documents appear in `internships.mod-unvectorised`.
+```bash
+uv venv --python 3.11 .venv && uv pip install -r requirements.txt
+.venv\Scripts\python.exe -m uvicorn app:app --port 9001      # then GET http://127.0.0.1:9001/health, /docs
+pytest scrapers/telegram_bot/tests scam_detector/tests
+```
 
-Things to know about Render:
+Needs `.env` (or exported variables) with at least `MONGODB_URI`. Selenium scrapers need Chrome installed.
 
-- **Memory:** Chrome plus the scam-detector stack (pandas, scikit-learn) needs roughly 2 GB. `render.yaml`
-  uses the `standard` plan; the free and starter plans (512 MB) are likely to be OOM-killed during a scrape.
-- **Free plan spin-down:** free services sleep after ~15 minutes without traffic, and a sleeping service
-  also kills a running scrape thread. Use a paid plan if scrapes must complete unattended.
-- **Disk is ephemeral:** the checkpoint file, scam-detector reputation/baseline files and the in-memory job list
-  reset on every deploy or restart. Staged documents in MongoDB are unaffected.
-- **Region:** pick the one closest to your MongoDB Atlas cluster, and allow Render's outbound IPs in
-  Atlas Network Access (or `0.0.0.0/0`).
+## Deploying
+
+One image, three Dockerfiles, because hosts differ in the user the container runs as:
+
+| File | Used for |
+|---|---|
+| `Dockerfile` | Hugging Face Spaces / Render. Non-root uid 1000, Google Chrome, `webdriver-manager` |
+| `Dockerfile.catalyst` | **Zoho Catalyst AppSail (current host).** Runs in `/app`, `HOME=/opt/home`, everything world-writable, because AppSail runs the container as an unknown non-root user. Default port 9000 |
+| `Dockerfile.oracle` | Oracle Always Free Arm VM (arm64/amd64 Debian Chromium) with `docker-compose.oracle.yml` (optional Cloudflare tunnel or Caddy profiles) |
+
+### Zoho Catalyst AppSail (current)
+
+Live at `https://internscraper.development.catalystappsail.in` (Development environment; Production gets a separate URL and separate env vars).
+
+1. **Build:** `.github/workflows/docker-hub.yml` builds `Dockerfile.catalyst` (linux/amd64) on every push to `main` and pushes `<DOCKERHUB_USERNAME>/ifind-scraper:latest` and `:<sha>`. Repo secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
+2. **Catalyst console:** Serverless, AppSail, Create (or Create Deployment). Deployment type *Docker Image*, registry *Docker Hub* (add the account under Settings, Integrations), image `<user>/ifind-scraper:latest`, port `9000`, memory `2048`, **startup command empty** (the image CMD runs from `/app`), environment variables from `.env`.
+3. **Check:** `GET /health` returns `{"status":"ok"}`. Instances scale to zero, so the first request after idle takes several seconds.
+4. **Register the Telegram webhook:** `python -m scrapers.telegram_bot.bot set-webhook https://<host>/telegram/webhook`.
+5. Allow `0.0.0.0/0` in MongoDB Atlas Network Access (AppSail has no fixed outbound IP).
+
+Disk is ephemeral: the checkpoint file, the scam-detector reputation store and the in-memory job list reset on every deploy or restart.
+
+### Railway
+
+`railway.json` points at `Dockerfile`, health check `/health`. Railway is not free (Hobby plan).
+
+### Oracle Always Free
+
+`docker compose -f docker-compose.oracle.yml up -d` with a `.env` copied from `.env.example.oracle`; binds `127.0.0.1:7860`. Profiles: `tunnel` (cloudflared, `TUNNEL_TOKEN`) or `caddy` (`DOMAIN`).
+
+### Render (legacy)
+
+`render.yaml` Blueprint, Docker runtime, `standard` plan (about 2 GB; 512 MB plans OOM during a scrape). Free instances sleep after about 15 minutes, which also kills a running scrape thread.
+
+## Other files
+
+`app.py` (FastAPI), `pipeline.py` (validate, dedup, score, stage, vectorizer trigger), `scam_detector/`, `scrapers/` (github, internshala, indeed, naukri, unstop, freshersworld, letsintern, telegram_bot), `migrate_address.py`, `backfill_source.py`, `env-manager.py`, `usage_log.py`, `pipeline-diagram.md`.

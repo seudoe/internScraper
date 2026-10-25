@@ -1,4 +1,4 @@
-# Builds the Dockerfile (linux/amd64, what Zoho Catalyst AppSail runs) and pushes it to Docker Hub.
+# Builds Dockerfile.catalyst (linux/amd64, what Zoho Catalyst AppSail runs) and pushes it to Docker Hub.
 # Repo secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (Docker Hub access token with read/write).
 name: docker-hub
 
@@ -20,7 +20,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile
+          file: Dockerfile.catalyst
           platforms: linux/amd64
           push: true
           tags: |

@@ -70,6 +70,7 @@ Base URL: `https://<service>.onrender.com` · Interactive docs: `/docs` (Swagger
 | `POST` | `/scrape` | Start a background scrape job → **202** with `job_id` |
 | `GET`  | `/scrape/{job_id}` | Poll a job's status and stats |
 | `GET`  | `/scrape` | List all jobs, newest first |
+| `POST` | `/analyze` | Re-run ONE stored internship through validation + scam detection and return every detail (normalized document, verdict, triggered rules, pipeline stages). Read-only: nothing is written, nothing goes to the vectoriser |
 | `POST` | `/process` | Scam-check one internship or a batch (platform path); returns verdicts, records them on the ifind document and sends auto-approved posts to the vectoriser |
 
 There is no auth on these endpoints. Anyone with the URL can start a scrape; keep the service
@@ -136,6 +137,33 @@ per-item failures. `404` if the job id is unknown.
 ```json
 {"jobs": [{"job_id": "…", "status": "done", "started_at": "…", "finished_at": "…", "stats": {…}, "error": null}], "total": 1}
 ```
+
+### `POST /analyze`
+
+Used by the moderator **Analyze** tab in ifind to re-run a single, already stored internship through the pipeline.
+Unlike `/process` it never writes to MongoDB and never calls the vectoriser, for any source; the caller decides what to keep.
+
+```json
+{ "source": "internshala", "internship": { "...": "the stored document (applyLink, deadlineDate, stipend, address, ...)" } }
+```
+
+Response 200:
+
+```json
+{
+  "source": "internshala",
+  "detectorFailed": false, "detectorError": null, "detectorSeconds": 0.4,
+  "stages": [ { "stage": "validation", "status": "passed", "detail": "..." }, { "stage": "scam detection", "status": "passed", "rules": ["..."] }, "..." ],
+  "result": {
+    "outcome": "scored", "moderationStatus": "pending_review", "score": 42.0, "decision": "review", "confidence": 0.7,
+    "flags": [], "triggeredRules": [], "lowConfidence": false, "hardDisqualified": false,
+    "scamDetails": { "...": "..." }, "fingerprint": "...", "document": { "...": "normalized internship" }
+  }
+}
+```
+
+`result.outcome` is `rejected` (with `reason`, e.g. `missing_required_fields`) or `error` when the item cannot be scored.
+Requires the `x-api-key` header when `INTERNSCRAPER_API_KEY` is set.
 
 ### `POST /process`
 
@@ -217,7 +245,7 @@ Set in the Render dashboard (**Environment**); `sync: false` entries in `render.
 | `COHERE_API_KEY` | for GitHub / Indeed / Internshala | AI enrichment |
 | `MAIN_URL` | optional | The main project (ifind): browser origin(s) allowed by CORS, comma-separated (e.g. `https://ifind.example.com,http://localhost:3000`). Nothing is allowed by default. The old name `MAIN_SERVER` is still read when this is unset. |
 | `FIRST_PARTY_DOMAINS` | for `/process` | iFind's own domains, comma-separated (e.g. `ifind.app`; `localhost:3000` in dev). Employer listings link to iFind itself; without this the scam detector treats that link as an off-platform domain and scores every employer post into review. Exact domain or real subdomain only. |
-| `INTERNSCRAPER_API_KEY` | optional | If set, `POST /process` requires it in the `x-api-key` header. |
+| `INTERNSCRAPER_API_KEY` | optional | If set, `POST /process` and `POST /analyze` require it in the `x-api-key` header. |
 | `TELEGRAM_BOT_TOKEN` | for the Telegram bot | Token from @BotFather. |
 | `TELEGRAM_WEBHOOK_SECRET` | for the Telegram bot | Any random string. Telegram echoes it in a header; `POST /telegram/webhook` rejects requests without it (503 while unset). |
 | `TELEGRAM_ALLOWED_USER_IDS` | for the Telegram bot | Comma-separated Telegram user ids allowed to submit posts. Everyone else is ignored. |

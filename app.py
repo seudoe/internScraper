@@ -47,6 +47,15 @@ POST /process        (platform path: internships posted on iFind itself)
   Response 200: { "source", "count", "summary", "detectorFailed", "results": [ {index, id, outcome, moderationStatus, score, persisted, vectorizerTriggered, ...} ] }
   If INTERNSCRAPER_API_KEY is set, send it as the x-api-key header.
 
+POST /analyze        (moderator "Analyze" tab: re-run ONE existing internship through the pipeline)
+  Body:   { "source": "internshala", "internship": {...stored document...} }
+  Runs the same validation, normalization and scam detection as /process but is strictly read-only: nothing is written
+  to MongoDB and nothing is sent to the vectoriser, whatever the source. The caller (ifind) decides what to keep.
+  Response 200: { "source", "detectorFailed", "detectorError", "detectorSeconds", "stages": [...], "result": {...} }
+    result = the /process result for the item plus `document` (the normalized internship as the pipeline would store it),
+    triggeredRules, lowConfidence and hardDisqualified. `stages` lists each pipeline step and what it concluded.
+  Same x-api-key header as /process.
+
 GET /health
   Response 200: { "status": "ok" }
 """
@@ -307,12 +316,77 @@ def process_internships(req: ProcessRequest, x_api_key: Optional[str] = Header(d
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+class AnalyzeRequest(BaseModel):
+    """One stored internship to re-run through the pipeline."""
+    source:     str  = "web_scraping"
+    internship: dict
+
+
+def _analysis_stages(result: dict, extra: dict) -> list[dict]:
+    """Human-readable trace of what the pipeline did to the item (shown in the moderator Analyze tab)."""
+    stages = []
+    outcome = result.get("outcome")
+    if outcome == "rejected":
+        stages.append({"stage": "validation", "status": "failed", "detail": result.get("reason")})
+        return stages
+    if outcome == "error":
+        stages.append({"stage": "validation", "status": "error", "detail": result.get("reason")})
+        return stages
+    stages.append({"stage": "validation", "status": "passed", "detail": "required fields and apply link are present"})
+    stages.append({"stage": "normalization", "status": "passed", "detail": "stipend, duration, address and skills normalized"})
+    detector_failed = bool(extra.get("detectorFailed"))
+    stages.append({
+        "stage": "scam detection",
+        "status": "failed" if detector_failed else "passed",
+        "detail": extra.get("detectorError") if detector_failed else
+                  f"score {result.get('score')} / decision {result.get('decision')} / confidence {result.get('confidence')}",
+        "seconds": extra.get("detectorSeconds"),
+        "rules": result.get("triggeredRules") or [],
+    })
+    stages.append({"stage": "moderation verdict", "status": result.get("moderationStatus"), "detail": result.get("rejectionReason")})
+    return stages
+
+
+@app.post("/analyze")
+def analyze_internship(req: AnalyzeRequest, x_api_key: Optional[str] = Header(default=None)):
+    """Re-runs one stored internship through validation and scam detection and returns every detail; writes nothing"""
+    expected = os.environ.get("INTERNSCRAPER_API_KEY")
+    if expected and x_api_key != expected:
+        raise HTTPException(status_code=401, detail="Invalid or missing x-api-key")
+
+    from pipeline import INTERNSHIP_SOURCES, evaluate_internships
+
+    # Stored documents use deadlineDate; the scraper-path normalizer reads deadline_date
+    item = dict(req.internship)
+    if item.get("deadlineDate") and not item.get("deadline_date"):
+        item["deadline_date"] = item["deadlineDate"]
+
+    # Legacy documents carry source "web_scraping"; the pipeline only needs a valid source label
+    source = req.source if req.source in INTERNSHIP_SOURCES else "github"
+    try:
+        # evaluate_internships is stateless; apply_platform_verdicts (the only writer) is deliberately never called here
+        out = evaluate_internships([item], source, with_documents=True)
+        result = out["results"][0]
+        return {
+            "source": req.source,
+            "detectorFailed": out["detectorFailed"],
+            "detectorError": out["detectorError"],
+            "detectorSeconds": out["detectorSeconds"],
+            "stages": _analysis_stages(result, out),
+            "result": result,
+        }
+    except Exception as exc:
+        log.exception("[analyze] failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ─── Display Routes on Startup ────────────────────────────────────────────────
 
 ENDPOINT_DESCRIPTIONS = {
     "/health": "Liveness health check to verify service status",
     ("/scrape", "POST"): "Starts a background scraping job for selected internship sources",
     ("/process", "POST"): "Scam-checks one internship or a batch (platform path); records the verdict and triggers the vectoriser",
+    ("/analyze", "POST"): "Re-runs one stored internship through the pipeline and returns every detail; read-only",
     ("/scrape", "GET"): "Lists all recent scraping jobs and their overall execution status",
     "/scrape/{job_id}": "Polls status, progress, and stats of a specific scraping job",
     "/docs": "Interactive Swagger UI documentation and API testing dashboard",

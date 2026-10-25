@@ -12,6 +12,7 @@ Two entry points share the same stages (see pipeline-diagram.md):
 import os
 import re
 import hashlib
+import json
 import logging
 import time
 from collections import Counter
@@ -726,7 +727,7 @@ def push_to_pipeline(
     return stats
 
 
-def evaluate_internships(items: list, source: str = "ifind") -> dict:
+def evaluate_internships(items: list, source: str = "ifind", with_documents: bool = False) -> dict:
     """
     Platform path (e.g. employer-posted internships). Runs the same validation, normalization and
     scam detection as the scraper path, but stores nothing and does no de-duplication: the caller
@@ -737,6 +738,8 @@ def evaluate_internships(items: list, source: str = "ifind") -> dict:
       reason   why an item was not scored (missing_required_fields, invalid_url, ...)
       moderationStatus  auto_approved | pending_review | auto_rejected (only when scored)
       score, decision, confidence, flags, rejectionReason, scamDetails, fingerprint
+      triggeredRules, lowConfidence, hardDisqualified   how the verdict was reached
+      document          (only with_documents=True) the normalized internship exactly as the pipeline would store it
     """
     _check_source(source)
     stats = {"saved": 0, "duplicate": 0, "rejected": 0, "errors": 0}
@@ -765,7 +768,13 @@ def evaluate_internships(items: list, source: str = "ifind") -> dict:
                 "rejectionReason": mod["rejectionReason"],
                 "scamDetails": mod["scamDetails"],
                 "fingerprint": doc.get("fingerprint"),
+                "triggeredRules": meta["rules"],
+                "lowConfidence": meta["lowConfidence"],
+                "hardDisqualified": meta["hardDisqualified"],
             }
+            if with_documents:
+                # default=str: the detector may leave numpy scalars / datetimes behind
+                results[ix]["document"] = json.loads(json.dumps({k: v for k, v in doc.items() if k != "_ix"}, default=str))
         except Exception as e:
             log.error("  💥 Error assembling result for '%s': %s", doc.get("name", "?"), e)
             outcomes[ix] = {"outcome": "error", "reason": f"{type(e).__name__}: {e}"[:200]}
@@ -796,6 +805,8 @@ def evaluate_internships(items: list, source: str = "ifind") -> dict:
         "count": len(items),
         "summary": summary,
         "detectorFailed": detail["detectorFailed"],
+        "detectorError": detail["detectorError"],
+        "detectorSeconds": detail["detectorSeconds"],
         "results": results,
     }
 

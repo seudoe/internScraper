@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example.oracle
+__pycache__
+*.pyc
+checkpoint_internships.json
+scrapers/**/*.json
+scrapers/telegram_bot/examples.txt
+tests
+scam_detector/tests

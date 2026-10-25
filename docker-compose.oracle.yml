@@ -1,0 +1,51 @@
+# Oracle Always Free VM (Ubuntu, Arm A1). From this folder:
+#   cp .env.example.oracle .env     # fill in, see the file
+#   docker compose -f docker-compose.oracle.yml up -d --build
+#
+# Public HTTPS: pick ONE profile.
+#   --profile tunnel   Cloudflare Tunnel (no open ports, no cert handling). Needs TUNNEL_TOKEN.
+#   --profile caddy    Caddy + automatic Let's Encrypt. Needs DOMAIN pointing at the VM and ports 80/443 open
+#                      in both the OCI security list and the VM firewall.
+#   docker compose -f docker-compose.oracle.yml --profile tunnel up -d --build
+
+services:
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile.oracle
+    restart: always
+    env_file: .env
+    environment:
+      PORT: "7860"
+    shm_size: "1gb"            # Chrome crashes on the default 64 MB /dev/shm
+    mem_limit: 8g              # leaves headroom of the 12 GB for the OS
+    expose:
+      - "7860"
+    ports:
+      - "127.0.0.1:7860:7860"  # local health checks only; never published
+
+  tunnel:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on: [scraper]
+
+  caddy:
+    profiles: ["caddy"]
+    image: caddy:2
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    command: caddy reverse-proxy --from ${DOMAIN} --to scraper:7860
+    volumes:
+      - caddy_data:/data
+    depends_on: [scraper]
+
+volumes:
+  caddy_data:

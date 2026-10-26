@@ -65,7 +65,13 @@ import uuid
 import logging
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
+
+from localrun import load_env
+
+load_env(Path(__file__).resolve().parent)   # .env (+ .env.local for local runs) before any module reads os.environ
+
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -78,6 +84,11 @@ setup("internscraper")
 capture_print()  # scrapers and the scam detector use bare print(); route it through the same format
 log = get_logger("app")
 
+# FastAPI on_event / websockets deprecation notices are several lines each and bury the startup banner
+import warnings
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 # ─── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="iFind Scraper API",
@@ -85,7 +96,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Allowed browser origins: MAIN_URL (the main project, comma-separated; set http://localhost:3000 for local dev).
+# Allowed browser origins: MAIN_URL (the main project, comma-separated; include http://localhost:4000 for local dev).
 from services import main_urls
 ALLOWED_ORIGINS = main_urls()
 
@@ -420,7 +431,16 @@ def print_routes():
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    # Local run: python app.py  (fixed port 5000; the Docker images start uvicorn themselves, on $PORT, and never get here)
     import uvicorn
-    port = int(os.environ.get("PORT", 7860))   # HF Spaces default port
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
+    from localrun import banner, pick_port
+
+    port = pick_port("internScraper", int(os.environ.get("PORT", 5000)), "ifind and the vectoriser (their INTERNSCRAPER_URL)")
+    banner("internScraper", port, {
+        "Vectoriser": os.environ.get("VECTORISER_URL"),
+        "Allowed origins (CORS)": ", ".join(ALLOWED_ORIGINS) or None,
+        "MongoDB": "configured" if os.environ.get("MONGODB_URI") else "MONGODB_URI is NOT set",
+    })
+    # log_config=None keeps the iFind log format and INFO level; uvicorn's default config would silence everything below WARNING
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=False, log_config=None)
 

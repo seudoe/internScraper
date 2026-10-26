@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 class AnalyzeEndpointTest(unittest.TestCase):
     def setUp(self):
         from fastapi.testclient import TestClient
-        os.environ.pop("INTERNSCRAPER_API_KEY", None)
         import app as service
+        os.environ.pop("INTERNSCRAPER_API_KEY", None)   # after the import: app loads .env, which may set it
         self.client = TestClient(service.app)
 
     def test_rejected_item_has_a_failed_validation_stage(self):

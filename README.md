@@ -261,11 +261,14 @@ Set in the host's environment settings (Catalyst AppSail **Environment Variable*
 
 ```bash
 uv venv --python 3.11 .venv && uv pip install -r requirements.txt
-.venv\Scripts\python.exe -m uvicorn app:app --port 9001      # then GET http://127.0.0.1:9001/health, /docs
+.venv\Scripts\python.exe app.py                      # http://localhost:5000  (/health, /docs)
 pytest scrapers/telegram_bot/tests scam_detector/tests
 ```
 
-Needs `.env` (or exported variables) with at least `MONGODB_URI`. Selenium scrapers need Chrome installed.
+Needs `.env` (or exported variables) with at least `MONGODB_URI`. Selenium scrapers need Chrome installed. `python app.py` prints
+the port and what it talks to; if 5000 is taken it prints a red warning and uses the next free port (then update
+`INTERNSCRAPER_URL` in ifind and the vectoriser). Local-only overrides go in `.env.local` (for example
+`VECTORISER_URL=http://localhost:6000`); it is loaded after `.env`, gitignored and never part of the Docker image.
 
 ## Deploying
 

@@ -258,7 +258,10 @@ def parse_api_item(item: dict) -> Optional[dict]:
         deadline = "N/A"
         regn = item.get("regnRequirements") or {}
         remain = regn.get("remain_days", "") or ""
-        if remain:
+        end_dt = regn.get("end_regn_dt")
+        if isinstance(end_dt, str) and end_dt.strip():
+            deadline = end_dt.strip()   # exact ISO registration end (also for listings that already ended)
+        elif remain:
             deadline = clean(remain)
         else:
             arr = regn.get("remainingDaysArray") or {}

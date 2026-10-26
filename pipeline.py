@@ -84,7 +84,7 @@ class ModerationDict(TypedDict, total=False):
     scamDetails: Optional[ScamDetailsDict]
 
 
-InternshipSource = Literal["github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "telegram", "ifind"]
+InternshipSource = Literal["github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "telegram", "web", "ifind"]
 
 
 class AddressDict(TypedDict, total=False):
@@ -129,6 +129,60 @@ class InternshipDict(TypedDict, total=False):
 def generate_fingerprint(company: str, name: str, city: str) -> str:
     raw = f"{company.lower().strip()}:{name.lower().strip()}:{(city or 'remote').lower().strip()}"
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+# ─── Deadlines ────────────────────────────────────────────────────────────────
+
+_DEADLINE_KEYS = ("deadline_date", "deadline_text", "apply_by", "deadline")
+_DATE_FORMATS = ("%d %b %y", "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y", "%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d %b", "%b %d")
+_REL_UNIT_DAYS = {"hour": 0, "day": 1, "week": 7, "month": 30}
+
+
+def parse_deadline(item: dict, now: Optional[datetime] = None) -> Optional[str]:
+    """
+    Application deadline of a scraped item as an ISO string (date-only values are midnight), or None.
+
+    Scrapers hand it over in different shapes: Internshala "28 May' 26" (`deadline_text`), letsintern "May 5, 2026"
+    (`apply_by`), Unstop "5 days left" (`deadline`), or an already parsed ISO value (`deadline_date`). "N/A" and
+    unparseable text give None, never a wrong date.
+    """
+    now = now or datetime.now()
+    for key in _DEADLINE_KEYS:
+        raw = item.get(key)
+        if not raw or not isinstance(raw, str):
+            continue
+        text = raw.strip()
+        if not text or text.lower() in {"n/a", "na", "none", "-", "not specified", "open"}:
+            continue
+        try:
+            return datetime.fromisoformat(text).replace(tzinfo=None).isoformat()
+        except ValueError:
+            pass
+
+        clean = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", text.replace("\u2019", " ").replace("'", " ").replace(",", " "), flags=re.I)
+        clean = re.sub(r"\s+", " ", clean).strip()
+        clean = re.sub(r"^(apply by|last date( to apply)?|deadline|closes( on)?)[: ]+", "", clean, flags=re.I)
+        for fmt in _DATE_FORMATS:
+            try:
+                dt = datetime.strptime(clean, fmt)
+            except ValueError:
+                continue
+            if dt.year == 1900:  # no year given: the next occurrence of that day
+                dt = dt.replace(year=now.year)
+                if dt.date() < now.date() - timedelta(days=30):
+                    dt = dt.replace(year=now.year + 1)
+            return dt.isoformat()
+
+        low = text.lower()
+        if "today" in low:
+            return now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        if "tomorrow" in low:
+            return (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        m = re.search(r"(\d+)\s*(hour|day|week|month)s?", low)
+        if m and re.search(r"left|remain|more|in\s+\d", low):
+            days = int(m.group(1)) * _REL_UNIT_DAYS[m.group(2)]
+            return (now + timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    return None
 
 
 # ─── Normalizers ──────────────────────────────────────────────────────────────
@@ -388,8 +442,32 @@ def _record_saved(detail, doc, meta, flag_counts, companies) -> None:
 
 # ─── Sources ──────────────────────────────────────────────────────────────────
 
-# Where an internship came from: one of the scrapers, or "ifind" (posted by an employer on our own platform).
-INTERNSHIP_SOURCES = ("github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "telegram", "ifind")
+# Where an internship is applied for: a job site we know ("internshala", ...), "telegram" (community bot), "web" (the
+# apply link goes to a company's own site or any other site we do not recognise), or "ifind" (posted by an employer here).
+INTERNSHIP_SOURCES = ("github", "internshala", "indeed", "naukri", "unstop", "freshersworld", "letsintern", "telegram", "web", "ifind")
+
+# Apply-link host -> source. A scraper's listing whose link leaves for a company site is "web", whichever scraper found it.
+HOST_TO_SOURCE = {
+    "internshala.com": "internshala",
+    "indeed.com": "indeed",
+    "naukri.com": "naukri",
+    "unstop.com": "unstop",
+    "freshersworld.com": "freshersworld",
+    "letsintern.com": "letsintern",
+    "letsintern.in": "letsintern",
+    "github.com": "github",
+}
+
+
+def source_for_link(link: Optional[str]) -> str:
+    """The source an apply link belongs to: a known job site, else "web" (company site or anything unrecognised)."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(link or "").hostname or "").lower()
+    for domain, src in HOST_TO_SOURCE.items():
+        if host == domain or host.endswith("." + domain):
+            return src
+    return "web"
 
 STAGING_COLLECTION = "internships.mod-unvectorised"
 LIVE_COLLECTION = "internships"
@@ -460,13 +538,7 @@ def _prepare_candidates(items: list, source: str, is_duplicate, stats: dict, det
             stipend  = normalize_stipend(item.get("stipend") or item.get("stipend_text") or "")
             duration = normalize_duration(item.get("duration") or item.get("duration_string") or "")
 
-            deadline_date_str: Optional[str] = None
-            if item.get("deadline_date"):
-                try:
-                    dt = datetime.fromisoformat(str(item["deadline_date"]))
-                    deadline_date_str = dt.isoformat()
-                except Exception:
-                    deadline_date_str = str(item["deadline_date"])
+            deadline_date_str: Optional[str] = parse_deadline(item)
 
             raw_degree = item.get("degree")
             degree = (
@@ -504,7 +576,7 @@ def _prepare_candidates(items: list, source: str, is_duplicate, stats: dict, det
                 "perks":              item.get("perks") if isinstance(item.get("perks"), list) else None,
                 "tags":               item.get("tags") if isinstance(item.get("tags"), list) else None,
                 "openings":           item.get("openings") or None,
-                "source":             source,
+                "source":             source if source in ("telegram", "ifind") else source_for_link(apply_link),
                 "isActive":           True,
                 "datePublished":      now_iso,
                 "deadlineDate":       deadline_date_str,

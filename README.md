@@ -34,10 +34,17 @@ Each staged document contains the listing fields plus `moderation` (`status`, `s
 `flags`, `source`, `reviewedBy`, `reviewedAt`, `rejectionReason`, `scamDetails`). It carries
 no vectors; those are added by the vectorizer when the listing is published.
 
-**Source.** Every listing carries `source`: the scraper id (`github`, `internshala`, `indeed`, `naukri`,
-`unstop`, `freshersworld`, `letsintern`) or `ifind` for internships employers post on our own platform.
-`moderation.source` says how it arrived (`web_scraping` or `employer`). Older documents still say
-`source: "web_scraping"`; `python backfill_source.py` (dry run) / `--apply` replaces it with the real scraper id.
+**Source.** Every listing carries `source`, the place a student applies: a known job site decided by the
+apply link's host (`internshala`, `indeed`, `naukri`, `unstop`, `freshersworld`, `letsintern`, `github`), `web` when
+the link leaves for a company's own site or any host we do not recognise (whichever scraper found it), `telegram`
+for posts from the bot, or `ifind` for internships employers post on our own platform.
+`moderation.source` says how it arrived (`web_scraping`, `community_bot` or `employer`). Older documents carry the
+legacy `web_scraping` or the finding scraper's id; `python backfill_source.py` (dry run) / `--apply` recomputes
+`source` from the apply link.
+
+**Deadline.** `deadlineDate` is parsed from whatever the scraper provides (`deadline_text` "28 May' 26",
+`apply_by` "May 5, 2026", `deadline` "5 days left", or an ISO value) by `pipeline.parse_deadline`; no deadline stays
+null. `python backfill_deadlines.py` (dry run) / `--apply` fills the stored Internshala listings.
 
 **Platform path.** Employer-posted internships use the same validation and scam detection through
 `POST /process`. The document belongs to ifind (`internships.this-platform`), so nothing is staged here: the verdict

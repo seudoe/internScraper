@@ -1,9 +1,10 @@
 """
-backfill_source.py — one-off migration: replace the legacy source "web_scraping" with the real scraper id.
+backfill_source.py — one-off migration: set every scraped listing's `source` from its apply link.
 
-Before, every scraped listing was stored with source "web_scraping". The schema now says `source` is the
-scraper (github, internshala, indeed, naukri, unstop, freshersworld, letsintern) or "ifind". The scraper id is
-recovered from the apply link's host. Listings whose host is not recognised are left untouched and reported.
+`source` is the site the student applies on: internshala, indeed, naukri, unstop, freshersworld, letsintern, github,
+or "web" when the link goes to a company's own site (or any host we do not recognise). Older documents carry the
+legacy "web_scraping" or the id of the scraper that found them (even when the link leaves for a company site).
+"telegram" and "ifind" listings are never touched.
 
   python backfill_source.py            dry run: prints what would change, writes nothing
   python backfill_source.py --apply    performs the updates
@@ -20,25 +21,9 @@ from urllib.parse import urlparse
 import pymongo
 from dotenv import load_dotenv
 
-HOST_TO_SOURCE = {
-    "internshala.com": "internshala",
-    "indeed.com": "indeed",
-    "naukri.com": "naukri",
-    "unstop.com": "unstop",
-    "freshersworld.com": "freshersworld",
-    "letsintern.com": "letsintern",
-    "letsintern.in": "letsintern",
-    "github.com": "github",
-}
+from pipeline import source_for_link
+
 COLLECTIONS = ("internships", "internships.mod-unvectorised")
-
-
-def source_for(link: str):
-    host = (urlparse(link or "").hostname or "").lower()
-    for domain, source in HOST_TO_SOURCE.items():
-        if host == domain or host.endswith("." + domain):
-            return source
-    return None
 
 
 def main() -> None:
@@ -55,16 +40,19 @@ def main() -> None:
     for name in COLLECTIONS:
         col = db[name]
         plan: Counter = Counter()
-        unknown: Counter = Counter()
+        web_hosts: Counter = Counter()
         updates: dict = {}
-        for doc in col.find({"source": "web_scraping"}, {"applyLink": 1}):
-            src = source_for(doc.get("applyLink"))
-            if src:
-                plan[src] += 1
-                updates.setdefault(src, []).append(doc["_id"])
-            else:
-                unknown[(urlparse(doc.get("applyLink") or "").hostname or "?")] += 1
-        print(f"{name}: would set {dict(plan)}; unrecognised hosts left as web_scraping: {dict(unknown)}")
+        for doc in col.find({"source": {"$nin": ["telegram", "ifind"]}}, {"applyLink": 1, "source": 1}):
+            src = source_for_link(doc.get("applyLink"))
+            if src == doc.get("source"):
+                continue
+            plan[src] += 1
+            updates.setdefault(src, []).append(doc["_id"])
+            if src == "web":
+                web_hosts[(urlparse(doc.get("applyLink") or "").hostname or "?")] += 1
+        print(f"{name}: would set {dict(plan)}")
+        if web_hosts:
+            print(f"  most common hosts that become \"web\": {web_hosts.most_common(8)}")
         if apply:
             for src, ids in updates.items():
                 res = col.update_many({"_id": {"$in": ids}}, {"$set": {"source": src}})

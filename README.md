@@ -260,10 +260,13 @@ Set in the host's environment settings (Catalyst AppSail **Environment Variable*
 ## Run locally
 
 ```bash
-uv venv --python 3.11 .venv && uv pip install -r requirements.txt
-.venv\Scripts\python.exe app.py                      # http://localhost:5000  (/health, /docs)
-pytest scrapers/telegram_bot/tests scam_detector/tests
+uv sync                                               # creates .venv (Python 3.11) from pyproject.toml + uv.lock
+uv run python app.py                                  # http://localhost:5000  (/health, /docs)
+uv run pytest                                         # tests/
+uv add <package>                                      # add a dependency (updates pyproject.toml and uv.lock)
 ```
+
+`pyproject.toml` + `uv.lock` are the source of truth. `requirements.txt` is kept in step for the Docker images (they still use pip): after `uv add`, mirror the pin there.
 
 Needs `.env` (or exported variables) with at least `MONGODB_URI`. Selenium scrapers need Chrome installed. `python app.py` prints
 the port and what it talks to; if 5000 is taken it prints a red warning and uses the next free port (then update

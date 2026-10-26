@@ -1,0 +1,36 @@
+[project]
+name = "internscraper"
+version = "0.1.0"
+description = "iFind internship scraper, scam detector and employer-post moderation API"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi==0.115.12",
+    "uvicorn[standard]==0.34.2",
+    "requests==2.32.3",
+    "beautifulsoup4==4.13.4",
+    "selenium==4.31.0",
+    "webdriver-manager==4.0.2",
+    "cohere==5.15.0",
+    "pymongo==4.12.1",
+    "pydantic>=2.7",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "scikit-learn>=1.4",
+    "rapidfuzz>=3.9",
+    "tldextract>=5.1",
+    "networkx>=3.2",
+    "python-Levenshtein>=0.25",
+    "python-whois>=0.9",
+    "python-dotenv==1.1.0",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false   # an application, not a library: nothing to build or install
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

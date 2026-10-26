@@ -23,6 +23,9 @@ jobs:
           file: Dockerfile.catalyst
           platforms: linux/amd64
           push: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp || github.run_started_at }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/ifind-scraper:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/ifind-scraper:${{ github.sha }}

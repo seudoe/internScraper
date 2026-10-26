@@ -197,6 +197,32 @@ def _run_job(job_id: str, scrapers: list[str], skip_scrape: bool, max_values: di
 def health():
     return {"status": "ok"}
 
+
+def _build_info() -> dict:
+    """Deployed commit: GIT_SHA (set at build/deploy), else a GIT_SHA file next to this module, else git, else "dev"."""
+    import subprocess
+    from datetime import datetime, timezone
+    sha = os.getenv("GIT_SHA", "").strip()
+    if not sha:
+        f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "GIT_SHA")
+        if os.path.exists(f):
+            sha = open(f).read().strip()
+    if not sha:
+        try:
+            sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=3,
+                                 cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip()
+        except Exception:
+            sha = ""
+    return {"service": "internscraper", "commit": (sha or "dev")[:7], "builtAt": os.getenv("BUILD_TIME") or None}
+
+
+_BUILD = _build_info()
+
+
+@app.get("/version")
+def version():
+    return _BUILD
+
 # just to change git status
 @app.post("/scrape", status_code=202)
 def start_scrape(req: ScrapeRequest):

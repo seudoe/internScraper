@@ -78,6 +78,11 @@ EOF
 # ─── Application code ─────────────────────────────────────────────────────────
 COPY . /app
 
+# Deployed commit, reported by GET /version (docker build --build-arg GIT_SHA=...)
+ARG GIT_SHA=
+ARG BUILD_TIME=
+ENV GIT_SHA=$GIT_SHA BUILD_TIME=$BUILD_TIME
+
 # Checkpoint file lives inside the container (ephemeral — fine for scraping).
 # If you attach a HF persistent storage bucket, mount it at /opt/home/app/data.
 RUN mkdir -p /app/data /opt/home \

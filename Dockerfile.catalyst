@@ -95,4 +95,4 @@ EXPOSE 9000
 # They are injected automatically as environment variables at runtime.
 
 # Render injects $PORT (default 10000); fall back to 7860 for local/other hosts.
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-9000} --workers 1"]
+CMD ["sh", "-c", "export HOME=/opt/home && uvicorn app:app --host 0.0.0.0 --port ${PORT:-9000} --workers 1"]

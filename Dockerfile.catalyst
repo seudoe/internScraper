@@ -58,7 +58,7 @@ ENV SE_CACHE_PATH=/opt/home/.cache/selenium \
     # webdriver_manager appends ".wdm" to this root itself
     WDM_CACHE_PATH=/opt/home \
     # Suppress webdriver-manager download logs
-    WDM_LOG=0 \
+    CHROMEDRIVER_PATH=/usr/local/bin/chromedriver \n    WDM_LOG=0 \
     # Chrome flags for headless containerised use
     CHROME_FLAGS="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu"
 
@@ -73,7 +73,12 @@ RUN pip install --no-cache-dir --upgrade pip \
 # runtime (HF free tier has limited egress during scraping).
 RUN python - <<'EOF'
 from webdriver_manager.chrome import ChromeDriverManager
-ChromeDriverManager().install()
+import os, shutil
+src = ChromeDriverManager().install()
+# AppSail runs as a non-root user that does not own the cache; webdriver_manager chmods the
+# driver on every use (EPERM), so the scrapers use this copy directly via CHROMEDRIVER_PATH.
+shutil.copy(src, "/usr/local/bin/chromedriver")
+os.chmod("/usr/local/bin/chromedriver", 0o755)
 EOF
 
 # ─── Application code ─────────────────────────────────────────────────────────

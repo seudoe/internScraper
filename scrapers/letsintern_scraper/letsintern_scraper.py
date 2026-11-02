@@ -109,7 +109,7 @@ def setup_driver(headless: bool = True) -> webdriver.Chrome:
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
     if USE_WDM:
-        svc = Service(ChromeDriverManager(cache_manager=DriverCacheManager(root_dir=os.getenv("WDM_CACHE_PATH"))).install())
+        svc = Service(os.getenv("CHROMEDRIVER_PATH") or ChromeDriverManager(cache_manager=DriverCacheManager(root_dir=os.getenv("WDM_CACHE_PATH"))).install())
         driver = webdriver.Chrome(service=svc, options=opts)
     else:
         driver = webdriver.Chrome(options=opts)

@@ -85,6 +85,11 @@ import socket
 try:
     socket.getaddrinfo("localhost", None)
 except socket.gaierror:
+    try:   # native processes (chromedriver, Chrome) need it in /etc/hosts too; works when running as root
+        with open("/etc/hosts", "a") as _hosts:
+            _hosts.write("\n127.0.0.1 localhost\n::1 localhost\n")
+    except OSError:
+        pass
     _getaddrinfo = socket.getaddrinfo
 
     def _getaddrinfo_localhost(host, *args, **kwargs):

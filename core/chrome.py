@@ -21,7 +21,7 @@ def start_chrome(options: Options, service=None) -> webdriver.Chrome:
         return webdriver.Chrome(service=service, options=options) if service else webdriver.Chrome(options=options)
 
     port = free_port()
-    args = [options.binary_location or "google-chrome", *options.arguments,
+    args = [options.binary_location or "google-chrome", *(a if a.startswith("-") else "--" + a for a in options.arguments),   # scrapers pass "user-agent=..." without dashes
             f"--remote-debugging-port={port}", "--remote-debugging-address=127.0.0.1",
             f"--user-data-dir={tempfile.mkdtemp(prefix='chrome-')}", "--no-first-run", "--no-default-browser-check", "about:blank"]
     proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

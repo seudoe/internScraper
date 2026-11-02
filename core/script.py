@@ -204,7 +204,34 @@ def _driver_diagnostics() -> str:
             f"chrome=[{run(['google-chrome', '--version'])}] missing_libs={missing} "
             f"uid={os.getuid()} proxies={ {k: v for k, v in os.environ.items() if 'proxy' in k.lower()} } "
             f"launch=[{_launch_driver(os.getenv('CHROMEDRIVER_PATH') or d)}] "
-            f"chrome_run=[{_run_chrome()}]")
+            f"chrome_run=[{_run_chrome()}] selenium=[{_selenium_session()}]")
+
+
+def _selenium_session() -> str:
+    """Open a real Selenium session with chromedriver's verbose log, and show /etc/hosts."""
+    import tempfile
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+    try:
+        hosts = open("/etc/hosts").read().strip()[-300:]
+    except OSError as e:
+        hosts = f"unreadable ({e})"
+    log_path = os.path.join(tempfile.gettempdir(), "chromedriver-diag.log")
+    opts = Options()
+    for a in ("--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"):
+        opts.add_argument(a)
+    result = "session ok"
+    try:
+        svc = Service(os.getenv("CHROMEDRIVER_PATH"), service_args=["--verbose", f"--log-path={log_path}"])
+        webdriver.Chrome(service=svc, options=opts).quit()
+    except Exception as e:
+        result = f"{type(e).__name__}: {str(e)[:200]}"
+    try:
+        log = open(log_path, errors="replace").read()[-1800:]
+    except OSError:
+        log = ""
+    return f"hosts={hosts!r} result={result!r} log={log!r}"
 
 
 def _run_chrome() -> str:

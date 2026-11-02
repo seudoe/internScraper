@@ -72,6 +72,13 @@ from localrun import load_env
 
 load_env(Path(__file__).resolve().parent)   # .env (+ .env.local for local runs) before any module reads os.environ
 
+# Catalyst AppSail sets HOME=/catalyst (not writable); webdriver_manager caches the ChromeDriver under ~/.wdm.
+# Must run before any scraper imports webdriver_manager (it reads ~ at import time).
+if not os.access(os.path.expanduser("~"), os.W_OK):
+    import tempfile
+    _home = "/opt/home" if os.access("/opt/home", os.W_OK) else tempfile.gettempdir()
+    os.environ["HOME"] = _home
+
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -221,7 +228,7 @@ _BUILD = _build_info()
 
 @app.get("/version")
 def version():
-    return _BUILD
+    return {**_BUILD, "home": os.environ.get("HOME")}
 
 @app.get("/check/{scraper_id}")
 def check_scrapers(scraper_id: str):

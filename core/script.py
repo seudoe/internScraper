@@ -247,8 +247,6 @@ def check_scraper(scraper: dict) -> dict:
            "seconds": round(time.monotonic() - start, 1)}
     if err:
         out["error"] = err
-        if "Can not connect to the Service" in err:
-            out["diagnostics"] = _driver_diagnostics()
     return out
 
 

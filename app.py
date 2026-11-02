@@ -233,7 +233,9 @@ def version():
 @app.get("/check/{scraper_id}")
 def check_scrapers(scraper_id: str):
     """Try to scrape one internship (nothing saved). scraper_id: a scraper id, or 'all'."""
-    from core.script import SCRAPER_REGISTRY, check_scraper
+    from core.script import SCRAPER_REGISTRY, check_scraper, _driver_diagnostics
+    if scraper_id == "diagnostics":   # chromedriver/Chrome health, no scraping (fast)
+        return {"diagnostics": _driver_diagnostics()}
     if scraper_id == "all":
         results = [check_scraper(s) for s in SCRAPER_REGISTRY]
         return {"status": "working" if all(r["status"] == "working" for r in results) else "error",

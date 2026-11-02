@@ -203,7 +203,22 @@ def _driver_diagnostics() -> str:
     return (f"driver={d} executable={os.access(d, os.X_OK)} version=[{run([d, '--version'])}] "
             f"chrome=[{run(['google-chrome', '--version'])}] missing_libs={missing} "
             f"uid={os.getuid()} proxies={ {k: v for k, v in os.environ.items() if 'proxy' in k.lower()} } "
-            f"launch=[{_launch_driver(os.getenv('CHROMEDRIVER_PATH') or d)}]")
+            f"launch=[{_launch_driver(os.getenv('CHROMEDRIVER_PATH') or d)}] "
+            f"chrome_run=[{_run_chrome()}]")
+
+
+def _run_chrome() -> str:
+    """Run headless Chrome directly (the flags the scrapers use) and report why it dies, plus /dev/shm and /tmp."""
+    import shutil, subprocess, tempfile
+    shm = shutil.disk_usage("/dev/shm").total // (1024 * 1024) if os.path.isdir("/dev/shm") else None
+    cmd = ["google-chrome", "--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+           f"--user-data-dir={tempfile.mkdtemp()}", "--dump-dom", "about:blank"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        out = f"exit={r.returncode} stdout={r.stdout.strip()[:120]!r} stderr={r.stderr.strip()[-900:]!r}"
+    except Exception as e:
+        out = f"{type(e).__name__}: {e}"
+    return f"shm_mb={shm} tmp_writable={os.access(tempfile.gettempdir(), os.W_OK)} {out}"
 
 
 def _launch_driver(path: str) -> str:

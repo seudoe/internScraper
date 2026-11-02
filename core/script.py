@@ -201,7 +201,33 @@ def _driver_diagnostics() -> str:
     d = drivers[0]
     missing = [l.strip() for l in run(["ldd", d]).splitlines() if "not found" in l]
     return (f"driver={d} executable={os.access(d, os.X_OK)} version=[{run([d, '--version'])}] "
-            f"chrome=[{run(['google-chrome', '--version'])}] missing_libs={missing}")
+            f"chrome=[{run(['google-chrome', '--version'])}] missing_libs={missing} "
+            f"uid={os.getuid()} proxies={ {k: v for k, v in os.environ.items() if 'proxy' in k.lower()} } "
+            f"launch=[{_launch_driver(os.getenv('CHROMEDRIVER_PATH') or d)}]")
+
+
+def _launch_driver(path: str) -> str:
+    """Start chromedriver by hand for 3 s: does it stay alive, accept a connection, and what does it print?"""
+    import socket, subprocess
+    port = 9519
+    try:
+        proc = subprocess.Popen([path, f"--port={port}", "--verbose"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    except Exception as e:
+        return f"spawn failed: {type(e).__name__}: {e}"
+    time.sleep(3)
+    alive = proc.poll() is None
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            connectable = True
+    except OSError as e:
+        connectable = f"no ({e})"
+    if alive:
+        proc.terminate()
+    try:
+        out = proc.communicate(timeout=5)[0]
+    except Exception:
+        out = ""
+    return f"alive={alive} exit={proc.returncode} connectable={connectable} output={out.strip()[-600:]!r}"
 
 
 def check_scraper(scraper: dict) -> dict:

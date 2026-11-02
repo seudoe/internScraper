@@ -57,7 +57,7 @@ USER user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH \
     # Tell Selenium/webdriver-manager where to cache the driver
-    WDM_CACHE_PATH=/home/user/.wdm \
+    WDM_CACHE_PATH=/home/user \
     # Suppress webdriver-manager download logs
     WDM_LOG=0 \
     # Chrome flags for headless containerised use

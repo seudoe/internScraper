@@ -73,6 +73,8 @@ Base URL: `https://<service>.onrender.com` · Interactive docs: `/docs` (Swagger
 | Method   | Path                 | Description                                                                                                                                                                                                              |
 | -------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GET`  | `/health`          | Liveness check → `{"status": "ok"}`                                                                                                                                                                                   |
+| `GET`  | `/version`         | Deployed commit → `{"service", "commit", "builtAt", "home"}` |
+| `GET`  | `/check/{scraper}` | Smoke-test one scraper (or `all`): tries to scrape one internship, saves nothing → `working` / `error` |
 | `POST` | `/scrape`          | Start a background scrape job → **202** with `job_id`                                                                                                                                                           |
 | `GET`  | `/scrape/{job_id}` | Poll a job's status and stats                                                                                                                                                                                            |
 | `GET`  | `/scrape`          | List all jobs, newest first                                                                                                                                                                                              |
@@ -143,6 +145,26 @@ per-item failures. `404` if the job id is unknown.
 ```json
 {"jobs": [{"job_id": "…", "status": "done", "started_at": "…", "finished_at": "…", "stats": {…}, "error": null}], "total": 1}
 ```
+
+### `GET /check/{scraper}`
+
+Smoke test: runs the scraper for a single internship and reports whether it worked. Nothing is
+written to MongoDB or the checkpoint (the Selenium scrapers still overwrite their own files under
+`data/scrapers/`). `{scraper}` is `all` or one of `github`, `internshala`, `indeed`, `naukri`, `unstop`,
+`freshersworld`, `letsintern`. An unknown id returns `404` listing the valid ones.
+
+```bash
+curl https://<service>/check/naukri
+# {"id":"naukri","status":"working","seconds":21.4}
+# {"id":"naukri","status":"error","seconds":3.4,"error":"PermissionError: …"}
+
+curl https://<service>/check/all
+# {"status":"error","results":[{"id":"github","status":"working","seconds":0.0}, …]}
+```
+
+`status` is `error` when the scraper raised or returned no internships; `error` carries the message.
+`/check/all` runs the scrapers one after another, so with the Chrome-based ones it can take a few
+minutes and hit a proxy timeout: check scrapers individually in that case.
 
 ### `POST /analyze`
 

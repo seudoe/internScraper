@@ -17,3 +17,4 @@ scrapers/**/*.json
 
 # local sample WhatsApp messages for the Telegram bot (contains phone numbers)
 scrapers/telegram_bot/examples.txt
+.venv

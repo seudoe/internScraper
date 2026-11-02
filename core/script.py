@@ -184,6 +184,26 @@ def run_scraper(scraper: dict, max_items: int = DEFAULT_MAX) -> tuple[list, str 
         return [], f"{type(e).__name__}: {e}"[:500]
 
 
+def _driver_diagnostics() -> str:
+    """chromedriver/Chrome versions and unresolved shared libraries, to explain 'Can not connect to the Service'."""
+    import glob, subprocess
+    root = os.getenv("WDM_CACHE_PATH") or os.path.expanduser("~")
+    drivers = glob.glob(os.path.join(root, ".wdm", "drivers", "chromedriver", "**", "chromedriver"), recursive=True)
+    drivers = [d for d in drivers if os.path.isfile(d)]
+    def run(cmd):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            return (r.stdout + r.stderr).strip()[:300]
+        except Exception as e:
+            return f"{type(e).__name__}: {e}"
+    if not drivers:
+        return f"no chromedriver under {root}/.wdm"
+    d = drivers[0]
+    missing = [l.strip() for l in run(["ldd", d]).splitlines() if "not found" in l]
+    return (f"driver={d} executable={os.access(d, os.X_OK)} version=[{run([d, '--version'])}] "
+            f"chrome=[{run(['google-chrome', '--version'])}] missing_libs={missing}")
+
+
 def check_scraper(scraper: dict) -> dict:
     """Try to scrape a single internship; nothing is written to the DB or checkpoint."""
     import importlib
@@ -201,6 +221,8 @@ def check_scraper(scraper: dict) -> dict:
            "seconds": round(time.monotonic() - start, 1)}
     if err:
         out["error"] = err
+        if "Can not connect to the Service" in err:
+            out["diagnostics"] = _driver_diagnostics()
     return out
 
 

@@ -58,8 +58,10 @@ ENV SE_CACHE_PATH=/opt/home/.cache/selenium \
     # webdriver_manager appends ".wdm" to this root itself
     WDM_CACHE_PATH=/opt/home \
     # Scrapers use this chromedriver copy directly (made in the RUN step below)
-    CHROMEDRIVER_PATH=/usr/local/bin/chromedriver \n    # Suppress webdriver-manager download logs
-    WDM_LOG=0 \n    # Chrome flags for headless containerised use
+    CHROMEDRIVER_PATH=/usr/local/bin/chromedriver \
+    # Suppress webdriver-manager download logs
+    WDM_LOG=0 \
+    # Chrome flags for headless containerised use
     CHROME_FLAGS="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu"
 
 WORKDIR /app

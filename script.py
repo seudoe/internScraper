@@ -183,6 +183,26 @@ def run_scraper(scraper: dict, max_items: int = DEFAULT_MAX) -> tuple[list, str 
         return [], f"{type(e).__name__}: {e}"[:500]
 
 
+def check_scraper(scraper: dict) -> dict:
+    """Try to scrape a single internship; nothing is written to the DB or checkpoint."""
+    import importlib
+    start = time.monotonic()
+    try:
+        mod = importlib.import_module(scraper["module"])
+        if scraper["id"] == "letsintern":
+            mod.MAX_ITEMS = 1
+    except Exception as e:
+        return {"id": scraper["id"], "status": "error", "error": f"{type(e).__name__}: {e}"[:500], "seconds": 0}
+    items, err = run_scraper(scraper, 1)
+    if not err and not items:
+        err = "no internships returned"
+    out = {"id": scraper["id"], "status": "error" if err else "working",
+           "seconds": round(time.monotonic() - start, 1)}
+    if err:
+        out["error"] = err
+    return out
+
+
 # ─── DB helpers ───────────────────────────────────────────────────────────────
 
 def _open_staging():

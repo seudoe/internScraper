@@ -57,6 +57,7 @@ LISTING_PAGES = [
     "https://letsintern.in/jobs/",
     "https://letsintern.in/",
 ]
+MAX_ITEMS    = None       # stop after this many internships (None = no cap; set by /check)
 OUTPUT_RAW   = "internships_raw.json"
 OUTPUT_FINAL = "internships.json"
 
@@ -505,6 +506,8 @@ def scrape(driver: webdriver.Chrome) -> list:
     # Step 2: visit each detail page and extract data
     results = []
     for idx, url in enumerate(urls, 1):
+        if MAX_ITEMS and len(results) >= MAX_ITEMS:
+            break
         try:
             item = parse_detail_page(driver, url)
             if item:

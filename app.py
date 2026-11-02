@@ -223,6 +223,20 @@ _BUILD = _build_info()
 def version():
     return _BUILD
 
+@app.get("/check/{scraper_id}")
+def check_scrapers(scraper_id: str):
+    """Try to scrape one internship (nothing saved). scraper_id: a scraper id, or 'all'."""
+    from script import SCRAPER_REGISTRY, check_scraper
+    if scraper_id == "all":
+        results = [check_scraper(s) for s in SCRAPER_REGISTRY]
+        return {"status": "working" if all(r["status"] == "working" for r in results) else "error",
+                "results": results}
+    scraper = next((s for s in SCRAPER_REGISTRY if s["id"] == scraper_id), None)
+    if not scraper:
+        raise HTTPException(404, f"Unknown scraper '{scraper_id}'. Valid: all, " + ", ".join(s["id"] for s in SCRAPER_REGISTRY))
+    return check_scraper(scraper)
+
+
 # just to change git status
 @app.post("/scrape", status_code=202)
 def start_scrape(req: ScrapeRequest):

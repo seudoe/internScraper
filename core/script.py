@@ -221,13 +221,22 @@ def _launch_driver(path: str) -> str:
             connectable = True
     except OSError as e:
         connectable = f"no ({e})"
+    try:
+        with socket.create_connection(("localhost", port), timeout=1):
+            by_name = True
+    except OSError as e:
+        by_name = f"no ({e})"
+    try:
+        resolved = [a[4][0] for a in socket.getaddrinfo("localhost", port, type=socket.SOCK_STREAM)]
+    except OSError as e:
+        resolved = f"failed ({e})"
     if alive:
         proc.terminate()
     try:
         out = proc.communicate(timeout=5)[0]
     except Exception:
         out = ""
-    return f"alive={alive} exit={proc.returncode} connectable={connectable} output={out.strip()[-600:]!r}"
+    return f"alive={alive} exit={proc.returncode} connectable={connectable} localhost_connectable={by_name} localhost_resolves={resolved} output={out.strip()[-600:]!r}"
 
 
 def check_scraper(scraper: dict) -> dict:

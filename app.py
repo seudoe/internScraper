@@ -79,6 +79,19 @@ if not os.access(os.path.expanduser("~"), os.W_OK):
     _home = "/opt/home" if os.access("/opt/home", os.W_OK) else tempfile.gettempdir()
     os.environ["HOME"] = _home
 
+# Catalyst AppSail containers have no "localhost" entry, so Selenium (which talks to chromedriver at
+# http://localhost:<port>) waits 30 s and fails with "Can not connect to the Service". Resolve it by hand.
+import socket
+try:
+    socket.getaddrinfo("localhost", None)
+except socket.gaierror:
+    _getaddrinfo = socket.getaddrinfo
+
+    def _getaddrinfo_localhost(host, *args, **kwargs):
+        return _getaddrinfo("127.0.0.1" if host == "localhost" else host, *args, **kwargs)
+
+    socket.getaddrinfo = _getaddrinfo_localhost
+
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

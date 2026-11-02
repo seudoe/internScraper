@@ -224,7 +224,8 @@ def _selenium_session() -> str:
     result = "session ok"
     try:
         svc = Service(os.getenv("CHROMEDRIVER_PATH"), service_args=["--verbose", f"--log-path={log_path}"])
-        webdriver.Chrome(service=svc, options=opts).quit()
+        from core.chrome import start_chrome
+        start_chrome(opts, svc).quit()
     except Exception as e:
         result = f"{type(e).__name__}: {str(e)[:200]}"
     try:

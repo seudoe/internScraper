@@ -15,6 +15,7 @@ import logging
 from typing import Optional
 
 from selenium import webdriver
+from core.chrome import start_chrome
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -128,9 +129,9 @@ def setup_driver(headless: bool = True) -> webdriver.Chrome:
     )
     if USE_WDM:
         svc = Service(os.getenv("CHROMEDRIVER_PATH") or ChromeDriverManager(cache_manager=DriverCacheManager(root_dir=os.getenv("WDM_CACHE_PATH"))).install())
-        driver = webdriver.Chrome(service=svc, options=opts)
+        driver = start_chrome(opts, svc)
     else:
-        driver = webdriver.Chrome(options=opts)
+        driver = start_chrome(opts)
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
         {"source": "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"},

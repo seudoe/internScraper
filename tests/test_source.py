@@ -1,6 +1,6 @@
 import pytest
 
-from pipeline import source_for_link
+from core.pipeline import source_for_link
 
 
 @pytest.mark.parametrize("link,expected", [

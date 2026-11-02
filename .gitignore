@@ -1,10 +1,13 @@
 .env
-checkpoint_internships.json
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 .wdm/
+
+# runtime data: checkpoint, scraper outputs, source baselines, run logs
 data/
+
 scrapers/**/__pycache__/
 scrapers/**/*.json
 

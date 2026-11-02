@@ -4,7 +4,8 @@
 !.env.example.oracle
 __pycache__
 *.pyc
-checkpoint_internships.json
+.pytest_cache
+data/
 scrapers/**/*.json
 scrapers/telegram_bot/examples.txt
 tests

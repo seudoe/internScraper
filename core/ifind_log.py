@@ -7,7 +7,7 @@ ifind/lib/logger.ts).
 Levels: DEBUG (dim) INFO (cyan) OK (green) WARN (yellow) ERROR (bold white on red). Colour is off when stderr is not a TTY or NO_COLOR is
 set; FORCE_COLOR=1 forces it. Credentials (DB URIs, API keys, bearer tokens) are redacted.
 
-    from ifind_log import setup, get_logger, RequestLogMiddleware
+    from core.ifind_log import setup, get_logger, RequestLogMiddleware
     setup("vectoriser")                      # once, at import time of the entrypoint
     log = get_logger("app")
     log.info("models ready", extra={"f": {"ms": 1830}})        # or log.ok(...), log.warn(...)

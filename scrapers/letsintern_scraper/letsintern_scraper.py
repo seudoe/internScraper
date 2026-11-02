@@ -16,6 +16,8 @@ Fields extracted:
 
 import re
 import json
+import os
+from pathlib import Path
 import time
 import logging
 from typing import Optional
@@ -30,6 +32,7 @@ from selenium.common.exceptions import StaleElementReferenceException, TimeoutEx
 
 try:
     from webdriver_manager.chrome import ChromeDriverManager
+    from webdriver_manager.core.driver_cache import DriverCacheManager
     USE_WDM = True
 except ImportError:
     USE_WDM = False
@@ -58,8 +61,9 @@ LISTING_PAGES = [
     "https://letsintern.in/",
 ]
 MAX_ITEMS    = None       # stop after this many internships (None = no cap; set by /check)
-OUTPUT_RAW   = "internships_raw.json"
-OUTPUT_FINAL = "internships.json"
+OUTPUT_DIR   = Path(__file__).resolve().parents[2] / "data" / "scrapers"   # <project>/data/scrapers
+OUTPUT_RAW   = OUTPUT_DIR / "letsintern_raw.json"
+OUTPUT_FINAL = OUTPUT_DIR / "letsintern_internships.json"
 
 SKILLS_LIST = [
     "python", "java", "c++", "javascript", "react", "node", "html", "css",
@@ -105,7 +109,7 @@ def setup_driver(headless: bool = True) -> webdriver.Chrome:
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
     if USE_WDM:
-        svc = Service(ChromeDriverManager().install())
+        svc = Service(ChromeDriverManager(cache_manager=DriverCacheManager(root_dir=os.getenv("WDM_CACHE_PATH"))).install())
         driver = webdriver.Chrome(service=svc, options=opts)
     else:
         driver = webdriver.Chrome(options=opts)
@@ -537,6 +541,7 @@ def scrape(driver: webdriver.Chrome) -> list:
 # ============================================================================
 def save_json(items: list, path: str):
     try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(items, indent=2, ensure_ascii=False))
         log.info("Saved %d items -> %s", len(items), path)

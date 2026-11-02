@@ -180,7 +180,7 @@ def test_bad_model_reply_is_a_clean_error():
 # ─── pipeline hooks ───────────────────────────────────────────────────────────
 
 def _prepare(item, source):
-    import pipeline
+    from core import pipeline
     stats = {"saved": 0, "duplicate": 0, "rejected": 0, "errors": 0}
     detail, outcomes = pipeline._new_detail(), {}
     return pipeline._prepare_candidates([item], source, None, stats, detail, outcomes), stats
@@ -197,13 +197,13 @@ def test_mailto_is_accepted_only_for_telegram():
 
 
 def test_fingerprint_uses_first_address_city():
-    import pipeline
+    from core import pipeline
     cands, _ = _prepare({**BASE, "applyLink": "https://a.example/j", "address": [{"city": "Pune"}, {"city": "Bangalore"}]}, "telegram")
     assert cands[0]["fingerprint"] == pipeline.generate_fingerprint("Foxo", "AI Intern", "Pune")
 
 
 def test_scoring_sees_the_email_domain_and_free_mail_is_never_auto_approved():
-    import pipeline
+    from core import pipeline
     cands, _ = _prepare({**BASE, "applyLink": "mailto:someone@gmail.com"}, "telegram")
     originals = pipeline._hide_mailto(cands)
     assert cands[0]["applyLink"] == "https://gmail.com"
@@ -218,7 +218,7 @@ def test_scoring_sees_the_email_domain_and_free_mail_is_never_auto_approved():
 
 
 def test_work_email_can_be_auto_approved():
-    import pipeline
+    from core import pipeline
     cands, _ = _prepare({**BASE, "applyLink": "mailto:careers@foxo.club"}, "telegram")
     originals = pipeline._hide_mailto(cands)
     pipeline._restore_mailto(cands, originals)

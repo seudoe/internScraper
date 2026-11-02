@@ -8,7 +8,7 @@ import json
 import os
 from dotenv import load_dotenv
 import cohere
-from usage_log import BudgetExceeded, tracked_chat
+from core.usage_log import BudgetExceeded, tracked_chat
 from datetime import datetime
 import time
 import urllib.parse

@@ -7,8 +7,8 @@ Internshala: the "APPLY BY" date on each stored listing's page. Unstop: `regnReq
 search API (listings it no longer returns keep none). Naukri has no deadline; letsintern only shows it on a JavaScript page,
 so its listings get one on the next scrape.
 
-  python backfill_deadlines.py            dry run: prints what would change, writes nothing
-  python backfill_deadlines.py --apply    performs the updates
+  python -m tools.backfill_deadlines            dry run: prints what would change, writes nothing
+  python -m tools.backfill_deadlines --apply    performs the updates
 
 Touches 'internships' and 'internships.mod-unvectorised'. Only documents with deadlineDate null are touched;
 safe to re-run. About 0.5 s per listing.
@@ -25,7 +25,7 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-from pipeline import parse_deadline
+from core.pipeline import parse_deadline
 
 COLLECTIONS = ("internships", "internships.mod-unvectorised")
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
@@ -89,7 +89,7 @@ def unstop_deadlines(wanted: set, max_pages: int = 400, idle_pages: int = 40) ->
 
 def main() -> None:
     apply = "--apply" in sys.argv
-    here = Path(__file__).resolve().parent
+    here = Path(__file__).resolve().parent.parent   # project root
     for env in (here / ".env", here / ".env.local"):
         if env.exists():
             load_dotenv(env)

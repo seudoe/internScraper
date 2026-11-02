@@ -4,7 +4,7 @@ pipeline.py — Moderation pipeline integrated with scam_detector
 Validates, deduplicates, runs scam detection and normalizes internships to the
 canonical Internship schema defined in ifind/types/internship.ts.
 
-Two entry points share the same stages (see pipeline-diagram.md):
+Two entry points share the same stages (see docs/pipeline-diagram.md):
   push_to_pipeline()      scraper path: stores the results in 'internships.mod-unvectorised'
   evaluate_internships()  platform path (source "ifind"): returns the verdicts, stores nothing
 """
@@ -903,7 +903,7 @@ def _platform_collection():
 
 def _trigger_platform_vectorizer(ids: list) -> bool:
     """POST {VECTORISER_URL}/vectorize-platform: vectorize in place, add to the graph, run every student through it."""
-    from services import vectoriser_url
+    from core.services import vectoriser_url
     url = vectoriser_url()
     if not url or not ids:
         return False

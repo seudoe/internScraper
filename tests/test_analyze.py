@@ -24,7 +24,7 @@ class AnalyzeEndpointTest(unittest.TestCase):
 
     def test_never_writes_or_triggers_the_vectoriser(self):
         item = {"name": "Dev Intern", "company": "Acme", "applyLink": "https://acme.example/jobs/1", "summary": "Build things", "deadlineDate": "2030-01-01T00:00:00"}
-        with mock.patch("pipeline.apply_platform_verdicts") as writer, mock.patch("pipeline._trigger_platform_vectorizer") as vec:
+        with mock.patch("core.pipeline.apply_platform_verdicts") as writer, mock.patch("core.pipeline._trigger_platform_vectorizer") as vec:
             res = self.client.post("/analyze", json={"source": "ifind", "internship": item})
         self.assertEqual(res.status_code, 200)
         writer.assert_not_called()

@@ -16,7 +16,7 @@ import re
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from usage_log import BudgetExceeded, tracked_chat
+from core.usage_log import BudgetExceeded, tracked_chat
 
 from .fetcher import Page
 from .parser import Post
@@ -94,7 +94,7 @@ def company_from_url(url: str) -> Optional[str]:
 
 def company_from_email(link: str) -> Optional[str]:
     """Company name from a work email's domain (mailto:hr@foxo.club -> Foxo); None for free-mail domains."""
-    from pipeline import FREE_MAIL_DOMAINS, mailto_domain
+    from core.pipeline import FREE_MAIL_DOMAINS, mailto_domain
 
     domain = mailto_domain(link)
     if not domain or domain in FREE_MAIL_DOMAINS:

@@ -1,14 +1,16 @@
 """
 Finalize Freshersworld scrape results.
 Deduplicates fw_raw.json and writes fw_internships.json with a quality report.
-Run from the workspace root: python freshersworld_scraper/finalize.py
+Run from the project root: python scrapers/freshersworld_scraper/finalize.py
 """
 import json
 import re
+from pathlib import Path
 from collections import Counter
 
-RAW_PATH   = "freshersworld_scraper/fw_raw.json"
-FINAL_PATH = "freshersworld_scraper/fw_internships.json"
+DATA_DIR   = Path(__file__).resolve().parents[2] / "data" / "scrapers"
+RAW_PATH   = DATA_DIR / "fw_raw.json"
+FINAL_PATH = DATA_DIR / "fw_internships.json"
 
 raw = json.load(open(RAW_PATH, encoding="utf-8"))
 

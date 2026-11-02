@@ -22,11 +22,11 @@ one batch per scraper; duplicate and peer-group checks in the detector work with
 
 Scam-detector decision → `moderation.status` on the staged document:
 
-| decision | score band | `moderation.status` | what happens next |
-|----------|-------------|---------------------|-------------------|
-| `clear`  | < 30        | `auto_approved`     | vectorizer publishes it to `internships` |
-| `review` | 30 – 70     | `pending_review`    | waits in staging for a moderator |
-| `block`  | ≥ 70        | `auto_rejected`     | stays in staging |
+| decision   | score band | `moderation.status` | what happens next                          |
+| ---------- | ---------- | --------------------- | ------------------------------------------ |
+| `clear`  | < 30       | `auto_approved`     | vectorizer publishes it to `internships` |
+| `review` | 30 – 70   | `pending_review`    | waits in staging for a moderator           |
+| `block`  | ≥ 70      | `auto_rejected`     | stays in staging                           |
 
 If the detector itself fails, **every** listing is routed to `pending_review` (never auto-approved).
 
@@ -39,19 +39,19 @@ apply link's host (`internshala`, `indeed`, `naukri`, `unstop`, `freshersworld`,
 the link leaves for a company's own site or any host we do not recognise (whichever scraper found it), `telegram`
 for posts from the bot, or `ifind` for internships employers post on our own platform.
 `moderation.source` says how it arrived (`web_scraping`, `community_bot` or `employer`). Older documents carry the
-legacy `web_scraping` or the finding scraper's id; `python backfill_source.py` (dry run) / `--apply` recomputes
+legacy `web_scraping` or the finding scraper's id; `python -m tools.backfill_source` (dry run) / `--apply` recomputes
 `source` from the apply link.
 
 **Deadline.** `deadlineDate` is parsed from whatever the scraper provides (`deadline_text` "28 May' 26",
 `apply_by` "May 5, 2026", `deadline` "5 days left", or an ISO value) by `pipeline.parse_deadline`; no deadline stays
-null. `python backfill_deadlines.py` (dry run) / `--apply` fills the stored Internshala listings.
+null. `python -m tools.backfill_deadlines` (dry run) / `--apply` fills the stored Internshala listings.
 
 **Platform path.** Employer-posted internships use the same validation and scam detection through
 `POST /process`. The document belongs to ifind (`internships.this-platform`), so nothing is staged here: the verdict
 goes back to the caller, and for an existing document that is still `pending_review` it is also written onto it.
 Auto-approved posts are then sent to the vectoriser (`POST {VECTORISER_URL}/vectorize-platform`), which vectorizes them
 in place, adds them to the graph and re-runs every student through it.
-The full flow for both paths is drawn in [`pipeline-diagram.md`](pipeline-diagram.md).
+The full flow for both paths is drawn in [`docs/pipeline-diagram.md`](docs/pipeline-diagram.md).
 
 ## Run log (`ifind.scrape.runs`)
 
@@ -70,14 +70,14 @@ Each `sources[]` entry (one per scraper): `scraped`, `saved`, `duplicate`, `reje
 
 Base URL: `https://<service>.onrender.com` · Interactive docs: `/docs` (Swagger), `/redoc`, `/openapi.json`
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET`  | `/health` | Liveness check → `{"status": "ok"}` |
-| `POST` | `/scrape` | Start a background scrape job → **202** with `job_id` |
-| `GET`  | `/scrape/{job_id}` | Poll a job's status and stats |
-| `GET`  | `/scrape` | List all jobs, newest first |
-| `POST` | `/analyze` | Re-run ONE stored internship through validation + scam detection and return every detail (normalized document, verdict, triggered rules, pipeline stages). Read-only: nothing is written, nothing goes to the vectoriser |
-| `POST` | `/process` | Scam-check one internship or a batch (platform path); returns verdicts, records them on the ifind document and sends auto-approved posts to the vectoriser |
+| Method   | Path                 | Description                                                                                                                                                                                                              |
+| -------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/health`          | Liveness check → `{"status": "ok"}`                                                                                                                                                                                   |
+| `POST` | `/scrape`          | Start a background scrape job → **202** with `job_id`                                                                                                                                                           |
+| `GET`  | `/scrape/{job_id}` | Poll a job's status and stats                                                                                                                                                                                            |
+| `GET`  | `/scrape`          | List all jobs, newest first                                                                                                                                                                                              |
+| `POST` | `/analyze`         | Re-run ONE stored internship through validation + scam detection and return every detail (normalized document, verdict, triggered rules, pipeline stages). Read-only: nothing is written, nothing goes to the vectoriser |
+| `POST` | `/process`         | Scam-check one internship or a batch (platform path); returns verdicts, records them on the ifind document and sends auto-approved posts to the vectoriser                                                               |
 
 There is no auth on these endpoints. Anyone with the URL can start a scrape; keep the service
 private or put a gateway in front of it.
@@ -89,10 +89,10 @@ and the call returns immediately.
 
 Request body (all fields optional):
 
-| Field | Type | Default | Notes |
-|-------|------|---------|-------|
-| `scrapers` | `list[string \| {id: max}]` | all 7 | Plain id uses the default cap of **300** items; `{id: n}` overrides the cap for that scraper (`n` must be a positive integer). |
-| `skip_scrape` | `bool` | `false` | `true` skips scraping and re-pushes `checkpoint_internships.json` through the pipeline. The checkpoint lives in the container and is lost on restart. |
+| Field           | Type                         | Default   | Notes                                                                                                                                                     |
+| --------------- | ---------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scrapers`    | `list[string \| {id: max}]` | all 7     | Plain id uses the default cap of **300** items; `{id: n}` overrides the cap for that scraper (`n` must be a positive integer).                  |
+| `skip_scrape` | `bool`                     | `false` | `true` skips scraping and re-pushes `data/checkpoint_internships.json` through the pipeline. The checkpoint lives in the container and is lost on restart. |
 
 Valid scraper ids: `github`, `internshala`, `indeed`, `naukri`, `unstop`, `freshersworld`, `letsintern`.
 
@@ -180,6 +180,7 @@ exactly `true`, otherwise a clear listing comes back `pending_review` with the f
 ```json
 { "source": "ifind", "internship": { "id": "abc", "name": "...", "company": "...", "applyLink": "https://...", "summary": "..." } }
 ```
+
 or `"internships": [ {...}, {...} ]`. `source` defaults to `ifind` and must be one of the sources above.
 Item fields are the same loose shape the scrapers produce (`name`/`title`, `applyLink`/`apply_link`,
 `summary`/`description`, `city`/`location` (or `address`: a list of `{city, state, country}`), `skills`, `stipend`, `duration`, `deadline_date`, ...).
@@ -218,7 +219,7 @@ item comes back `pending_review`. `400` for an unknown source, no items, or more
 
 A listing stores its locations as `address: [{city, state, country}, ...]` (no flat `city`/`state`/`country`).
 Scrapers still produce one flat `city`; the pipeline wraps it. The dedup fingerprint uses the **first** address's city.
-Documents from before this change are converted once with `python migrate_address.py` (dry run) / `--apply`;
+Documents from before this change are converted once with `python -m tools.migrate_address` (dry run) / `--apply`;
 run it before deploying code that reads `address`.
 
 ## Telegram bot (`scrapers/telegram_bot/`)
@@ -245,17 +246,17 @@ Telegram → POST /telegram/webhook → split into posts → fetch the link (req
 
 Set in the host's environment settings (Catalyst AppSail **Environment Variable**, Render **Environment**, Oracle/Railway `.env`). A ready list is in `.env.example.oracle`:
 
-| Secret | Required | Description |
-|--------|----------|-------------|
-| `MONGODB_URI` | yes | MongoDB Atlas connection string (database `ifind`) |
-| `COHERE_API_KEY` | for GitHub / Indeed / Internshala | AI enrichment |
-| `MAIN_URL` | optional | The main project (ifind): browser origin(s) allowed by CORS, comma-separated (e.g. `https://ifind.example.com,http://localhost:3000`). Nothing is allowed by default. The old name `MAIN_SERVER` is still read when this is unset. |
-| `FIRST_PARTY_DOMAINS` | for `/process` | iFind's own domains, comma-separated (e.g. `ifind.app`; `localhost:3000` in dev). Employer listings link to iFind itself; without this the scam detector treats that link as an off-platform domain and scores every employer post into review. Exact domain or real subdomain only. |
-| `INTERNSCRAPER_API_KEY` | optional | If set, `POST /process` and `POST /analyze` require it in the `x-api-key` header. |
-| `TELEGRAM_BOT_TOKEN` | for the Telegram bot | Token from @BotFather. |
-| `TELEGRAM_WEBHOOK_SECRET` | for the Telegram bot | Any random string. Telegram echoes it in a header; `POST /telegram/webhook` rejects requests without it (503 while unset). |
-| `TELEGRAM_ALLOWED_USER_IDS` | for the Telegram bot | Comma-separated Telegram user ids allowed to submit posts. Everyone else is ignored. |
-| `VECTORISER_URL` | recommended | Base URL of the vectoriser service (`tf-idfs+berts/vectoriser`). After a push, `POST {VECTORISER_URL}/vectorize-hnsw` vectorizes and graph-indexes auto-approved listings, and the vectoriser re-runs every student through the graph. `/process` calls `/vectorize-platform` the same way for auto-approved employer posts. Unset → they wait until the vectorizer is triggered some other way. |
+| Secret                        | Required                          | Description                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`               | yes                               | MongoDB Atlas connection string (database `ifind`)                                                                                                                                                                                                                                                                                                                                                      |
+| `COHERE_API_KEY`            | for GitHub / Indeed / Internshala | AI enrichment                                                                                                                                                                                                                                                                                                                                                                                             |
+| `MAIN_URL`                  | optional                          | The main project (ifind): browser origin(s) allowed by CORS, comma-separated (e.g. `https://ifind.example.com,http://localhost:3000`). Nothing is allowed by default. The old name `MAIN_SERVER` is still read when this is unset.                                                                                                                                                                    |
+| `FIRST_PARTY_DOMAINS`       | for `/process`                  | iFind's own domains, comma-separated (e.g. `ifind.app`; `localhost:3000` in dev). Employer listings link to iFind itself; without this the scam detector treats that link as an off-platform domain and scores every employer post into review. Exact domain or real subdomain only.                                                                                                                  |
+| `INTERNSCRAPER_API_KEY`     | optional                          | If set, `POST /process` and `POST /analyze` require it in the `x-api-key` header.                                                                                                                                                                                                                                                                                                                   |
+| `TELEGRAM_BOT_TOKEN`        | for the Telegram bot              | Token from @BotFather.                                                                                                                                                                                                                                                                                                                                                                                    |
+| `TELEGRAM_WEBHOOK_SECRET`   | for the Telegram bot              | Any random string. Telegram echoes it in a header; `POST /telegram/webhook` rejects requests without it (503 while unset).                                                                                                                                                                                                                                                                              |
+| `TELEGRAM_ALLOWED_USER_IDS` | for the Telegram bot              | Comma-separated Telegram user ids allowed to submit posts. Everyone else is ignored.                                                                                                                                                                                                                                                                                                                      |
+| `VECTORISER_URL`            | recommended                       | Base URL of the vectoriser service (`tf-idfs+berts/vectoriser`). After a push, `POST {VECTORISER_URL}/vectorize-hnsw` vectorizes and graph-indexes auto-approved listings, and the vectoriser re-runs every student through the graph. `/process` calls `/vectorize-platform` the same way for auto-approved employer posts. Unset → they wait until the vectorizer is triggered some other way. |
 
 ## Run locally
 
@@ -277,11 +278,11 @@ the port and what it talks to; if 5000 is taken it prints a red warning and uses
 
 One image, three Dockerfiles, because hosts differ in the user the container runs as:
 
-| File | Used for |
-|---|---|
-| `Dockerfile` | Hugging Face Spaces / Render. Non-root uid 1000, Google Chrome, `webdriver-manager` |
+| File                    | Used for                                                                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dockerfile`          | Hugging Face Spaces / Render. Non-root uid 1000, Google Chrome, `webdriver-manager`                                                                                                              |
 | `Dockerfile.catalyst` | **Zoho Catalyst AppSail (current host).** Runs in `/app`, `HOME=/opt/home`, everything world-writable, because AppSail runs the container as an unknown non-root user. Default port 9000 |
-| `Dockerfile.oracle` | Oracle Always Free Arm VM (arm64/amd64 Debian Chromium) with `docker-compose.oracle.yml` (optional Cloudflare tunnel or Caddy profiles) |
+| `Dockerfile.oracle`   | Oracle Always Free Arm VM (arm64/amd64 Debian Chromium) with `docker-compose.oracle.yml` (optional Cloudflare tunnel or Caddy profiles)                                                          |
 
 ### Zoho Catalyst AppSail (current)
 
@@ -309,4 +310,15 @@ Disk is ephemeral: the checkpoint file, the scam-detector reputation store and t
 
 ## Other files
 
-`app.py` (FastAPI), `pipeline.py` (validate, dedup, score, stage, vectorizer trigger), `scam_detector/`, `scrapers/` (github, internshala, indeed, naukri, unstop, freshersworld, letsintern, telegram_bot), `migrate_address.py`, `backfill_source.py`, `env-manager.py`, `usage_log.py`, `pipeline-diagram.md`.
+```
+app.py            FastAPI entrypoint (uvicorn app:app)
+core/             pipeline.py (validate, dedup, score, stage, vectorizer trigger), script.py (scraper registry + runner),
+                  usage_log.py, services.py, ifind_log.py, localrun.py
+scam_detector/    scam scoring
+scrapers/         github, internshala, indeed, naukri, unstop, freshersworld, letsintern, telegram_bot
+tools/            one-off scripts, run from the project root: python -m tools.backfill_source | backfill_deadlines | migrate_address;
+                  python tools/env_manager.py
+docs/             pipeline-diagram.md
+tests/            pytest
+data/             runtime output, gitignored: checkpoint, scraper JSON (data/scrapers/), source_baselines.json
+```

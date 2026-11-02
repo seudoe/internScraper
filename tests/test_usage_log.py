@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 mongomock = pytest.importorskip("mongomock")
 
-import usage_log  # noqa: E402
+from core import usage_log  # noqa: E402
 
 
 @pytest.fixture()

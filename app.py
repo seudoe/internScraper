@@ -68,7 +68,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from localrun import load_env
+from core.localrun import load_env
 
 load_env(Path(__file__).resolve().parent)   # .env (+ .env.local for local runs) before any module reads os.environ
 
@@ -85,7 +85,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
-from ifind_log import RequestLogMiddleware, capture_print, get_logger, setup
+from core.ifind_log import RequestLogMiddleware, capture_print, get_logger, setup
 
 setup("internscraper")
 capture_print()  # scrapers and the scam detector use bare print(); route it through the same format
@@ -104,7 +104,7 @@ app = FastAPI(
 )
 
 # Allowed browser origins: MAIN_URL (the main project, comma-separated; include http://localhost:4000 for local dev).
-from services import main_urls
+from core.services import main_urls
 ALLOWED_ORIGINS = main_urls()
 
 app.add_middleware(RequestLogMiddleware)
@@ -171,7 +171,7 @@ def _run_job(job_id: str, scrapers: list[str], skip_scrape: bool, max_values: di
              job_id, scrapers, max_values, skip_scrape)
 
     try:
-        from script import main as run_pipeline
+        from core.script import main as run_pipeline
         def _progress(partial: dict):
             with _jobs_lock:
                 _jobs[job_id]["stats"] = partial   # live totals after each scraper finishes
@@ -233,7 +233,7 @@ def version():
 @app.get("/check/{scraper_id}")
 def check_scrapers(scraper_id: str):
     """Try to scrape one internship (nothing saved). scraper_id: a scraper id, or 'all'."""
-    from script import SCRAPER_REGISTRY, check_scraper
+    from core.script import SCRAPER_REGISTRY, check_scraper
     if scraper_id == "all":
         results = [check_scraper(s) for s in SCRAPER_REGISTRY]
         return {"status": "working" if all(r["status"] == "working" for r in results) else "error",
@@ -353,7 +353,7 @@ def process_internships(req: ProcessRequest, x_api_key: Optional[str] = Header(d
     if expected and x_api_key != expected:
         raise HTTPException(status_code=401, detail="Invalid or missing x-api-key")
 
-    from pipeline import INTERNSHIP_SOURCES, evaluate_internships
+    from core.pipeline import INTERNSHIP_SOURCES, evaluate_internships
 
     if req.source not in INTERNSHIP_SOURCES:
         raise HTTPException(status_code=400, detail=f"Unknown source '{req.source}'. Valid: {list(INTERNSHIP_SOURCES)}")
@@ -366,7 +366,7 @@ def process_internships(req: ProcessRequest, x_api_key: Optional[str] = Header(d
     try:
         result = evaluate_internships(items, req.source)
         if req.source == "ifind":
-            from pipeline import apply_platform_verdicts
+            from core.pipeline import apply_platform_verdicts
             result = apply_platform_verdicts(result)
         return result
     except Exception as exc:
@@ -412,7 +412,7 @@ def analyze_internship(req: AnalyzeRequest, x_api_key: Optional[str] = Header(de
     if expected and x_api_key != expected:
         raise HTTPException(status_code=401, detail="Invalid or missing x-api-key")
 
-    from pipeline import INTERNSHIP_SOURCES, evaluate_internships
+    from core.pipeline import INTERNSHIP_SOURCES, evaluate_internships
 
     # Stored documents use deadlineDate; the scraper-path normalizer reads deadline_date
     item = dict(req.internship)
@@ -480,7 +480,7 @@ def print_routes():
 if __name__ == "__main__":
     # Local run: python app.py  (fixed port 5000; the Docker images start uvicorn themselves, on $PORT, and never get here)
     import uvicorn
-    from localrun import banner, pick_port
+    from core.localrun import banner, pick_port
 
     port = pick_port("internScraper", int(os.environ.get("PORT", 5000)), "ifind and the vectoriser (their INTERNSCRAPER_URL)")
     banner("internScraper", port, {

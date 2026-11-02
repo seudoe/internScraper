@@ -6,8 +6,8 @@ or "web" when the link goes to a company's own site (or any host we do not recog
 legacy "web_scraping" or the id of the scraper that found them (even when the link leaves for a company site).
 "telegram" and "ifind" listings are never touched.
 
-  python backfill_source.py            dry run: prints what would change, writes nothing
-  python backfill_source.py --apply    performs the updates
+  python -m tools.backfill_source            dry run: prints what would change, writes nothing
+  python -m tools.backfill_source --apply    performs the updates
 
 Touches collections 'internships' and 'internships.mod-unvectorised'. Run it once; it is safe to re-run.
 """
@@ -21,14 +21,14 @@ from urllib.parse import urlparse
 import pymongo
 from dotenv import load_dotenv
 
-from pipeline import source_for_link
+from core.pipeline import source_for_link
 
 COLLECTIONS = ("internships", "internships.mod-unvectorised")
 
 
 def main() -> None:
     apply = "--apply" in sys.argv
-    here = Path(__file__).resolve().parent
+    here = Path(__file__).resolve().parent.parent   # project root
     for env in (here / ".env", here / ".env.local", here.parent / "ifind" / ".env.local"):
         if env.exists():
             load_dotenv(env)

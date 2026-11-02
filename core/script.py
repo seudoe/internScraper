@@ -19,16 +19,16 @@ import os
 import json
 import logging
 import argparse
-from services import vectoriser_url
-from usage_log import BudgetExceeded
+from core.services import vectoriser_url
+from core.usage_log import BudgetExceeded
 import time
 from pathlib import Path
 from datetime import datetime, timezone
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-SCRAPER_DIR = Path(__file__).parent
+SCRAPER_DIR = Path(__file__).resolve().parent.parent   # project root
 SCRAPERS_DIR = SCRAPER_DIR / "scrapers"
-CHECKPOINT_FILE = SCRAPER_DIR / "checkpoint_internships.json"
+CHECKPOINT_FILE = SCRAPER_DIR / "data" / "checkpoint_internships.json"
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -127,6 +127,7 @@ def load_checkpoint() -> list:
 def save_checkpoint(internships: list):
     """Save all accumulated internships to the checkpoint file."""
     try:
+        CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(CHECKPOINT_FILE, "w", encoding="utf-8") as f:
             json.dump(internships, f, indent=2, ensure_ascii=False, default=str)
         log.info("💾 Checkpoint saved: %d internships → %s", len(internships), CHECKPOINT_FILE)
@@ -229,7 +230,7 @@ def _open_staging():
 
 def _push_batch(items: list, scraper_id: str, col) -> dict:
     """Run one scraper's items through dedup + scam detection and save to staging."""
-    from pipeline import push_to_pipeline
+    from core.pipeline import push_to_pipeline
 
     # `source` on every stored listing is the scraper id (github, indeed, ...), not the generic channel
     log.info("▶ Moderation pipeline: %s (%d items)", scraper_id, len(items))

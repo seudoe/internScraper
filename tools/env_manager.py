@@ -3,7 +3,7 @@ import sys
 import urllib.request
 import urllib.error
 
-ENV_PATH = os.path.join(os.getcwd(), ".env")
+ENV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 API_URL = os.environ.get("ENV_MANAGER_URL", "https://env-manage.vercel.app")
 
 

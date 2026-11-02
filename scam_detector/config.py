@@ -193,7 +193,7 @@ class ConfidenceConfig(BaseModel):
         description="Adjust sparse fields penalty relative to per-source baseline completeness.",
     )
     source_baseline_path: str = Field(
-        default="source_baselines.json",
+        default="data/source_baselines.json",
         description="Path to save/load per-source baseline statistics.",
     )
     global_completeness_target: float = Field(

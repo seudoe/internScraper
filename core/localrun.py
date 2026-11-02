@@ -1,7 +1,7 @@
 """
 Local-run helpers (same file in vectoriser and internScraper): load the env files, pick a free port, say clearly what is running.
 
-    load_env(Path(__file__).parent)                       # at the top of the entrypoint, before anything reads os.environ
+    load_env(Path(__file__).resolve().parent.parent)                       # at the top of the entrypoint, before anything reads os.environ
     port = pick_port("internScraper", 5000, "ifind and vectoriser (INTERNSCRAPER_URL)")
     banner("internScraper", port, {"Talks to vectoriser": os.environ.get("VECTORISER_URL")})
 

@@ -22,6 +22,8 @@ Install:
 
 import re
 import json
+import os
+from pathlib import Path
 import time
 import logging
 import requests
@@ -39,8 +41,9 @@ log = logging.getLogger("unstop")
 TARGET       = 300        # Stop after collecting this many unique internships
 PER_PAGE     = 20         # Items per API page (max 20)
 MAX_PAGES    = 100        # Safety cap on pages to fetch
-OUTPUT_RAW   = "unstop_raw.json"
-OUTPUT_FINAL = "unstop_internships.json"
+OUTPUT_DIR   = Path(__file__).resolve().parents[2] / "data" / "scrapers"   # <project>/data/scrapers
+OUTPUT_RAW   = OUTPUT_DIR / "unstop_raw.json"
+OUTPUT_FINAL = OUTPUT_DIR / "unstop_internships.json"
 
 API_BASE = "https://unstop.com/api/public/opportunity/search-result"
 HEADERS  = {
@@ -350,6 +353,7 @@ def deduplicate(items: list) -> list:
 # ============================================================================
 def save_json(items: list, path: str):
     try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(items, indent=2, ensure_ascii=False))
         log.info("Saved %d items → %s", len(items), path)

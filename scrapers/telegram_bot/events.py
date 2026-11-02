@@ -16,7 +16,7 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urlparse
 
-from usage_log import BudgetExceeded, IST
+from core.usage_log import BudgetExceeded, IST
 
 from .extractor import PAGE_CHARS, _clean_list, _cohere_llm, _parse_json
 from .fetcher import Page

@@ -30,7 +30,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple
 import requests
 from fastapi import APIRouter, Body, Header, HTTPException
 
-import usage_log
+from core import usage_log
 
 from . import events
 from .extractor import extract_internships
@@ -131,8 +131,8 @@ def push_item(item: dict) -> Tuple[str, Optional[str], Optional[float]]:
     Run one extracted item through the pipeline. Returns (outcome, moderation status, scam score) where
     outcome is "saved", "duplicate" or "rejected"; raises on infrastructure errors.
     """
-    from pipeline import STAGING_COLLECTION, push_to_pipeline
-    from script import _open_staging
+    from core.pipeline import STAGING_COLLECTION, push_to_pipeline
+    from core.script import _open_staging
 
     client, col = _open_staging()
     try:
@@ -210,7 +210,7 @@ def process_post(
 
 def push_event(event: dict, submitted_by: Optional[str] = None) -> Tuple[str, dict]:
     """Store an event in the `events` collection. Returns ("saved"|"updated", stored document); raises on infrastructure errors."""
-    from script import _open_staging
+    from core.script import _open_staging
 
     client, staging = _open_staging()
     try:
@@ -305,7 +305,7 @@ def process_message(chat_id: int, text: str) -> None:
     log.info("message done", extra={"f": {"posts": len(posts), "autoApproved": any_approved}})
     if any_approved:
         try:
-            from script import _trigger_vectorizer
+            from core.script import _trigger_vectorizer
             _trigger_vectorizer()
         except Exception as exc:
             log.warning("vectoriser trigger failed: %s", exc)

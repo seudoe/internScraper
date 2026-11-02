@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytest
 
-from pipeline import parse_deadline
+from core.pipeline import parse_deadline
 
 NOW = datetime(2026, 10, 26, 12, 0)
 

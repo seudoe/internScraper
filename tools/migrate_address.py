@@ -6,8 +6,8 @@ Before, an internship stored `city`, `state` and `country` as three top-level fi
 every old document: it builds `address` from the three fields (skipping empty ones) and removes them.
 Documents that already have `address` are only cleaned of any leftover flat fields.
 
-  python migrate_address.py            dry run: prints what would change, writes nothing
-  python migrate_address.py --apply    performs the updates
+  python -m tools.migrate_address            dry run: prints what would change, writes nothing
+  python -m tools.migrate_address --apply    performs the updates
 
 Touches 'internships', 'internships.mod-unvectorised' and 'internships.this-platform'. Run it ONCE, before
 deploying the new code (the code no longer reads the flat fields); it is safe to re-run.
@@ -44,7 +44,7 @@ def update_for(doc: dict):
 
 def main() -> None:
     apply = "--apply" in sys.argv
-    here = Path(__file__).resolve().parent
+    here = Path(__file__).resolve().parent.parent   # project root
     for env in (here / ".env", here / ".env.local", here.parent / "ifind" / ".env.local"):
         if env.exists():
             load_dotenv(env)

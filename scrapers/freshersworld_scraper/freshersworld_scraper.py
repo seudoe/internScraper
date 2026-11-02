@@ -17,6 +17,8 @@ Install:
 
 import re
 import json
+import os
+from pathlib import Path
 import time
 import logging
 from typing import Optional
@@ -32,6 +34,7 @@ from selenium.common.exceptions import StaleElementReferenceException, TimeoutEx
 
 try:
     from webdriver_manager.chrome import ChromeDriverManager
+    from webdriver_manager.core.driver_cache import DriverCacheManager
     USE_WDM = True
 except ImportError:
     USE_WDM = False
@@ -47,8 +50,9 @@ log = logging.getLogger("fw")
 TARGET       = 300        # Stop after collecting this many unique internships
 PAGE_LIMIT   = 20         # Items per page (Freshersworld default)
 PAGE_WAIT    = 8          # Seconds to wait for page load
-OUTPUT_RAW   = "freshersworld_scraper/fw_raw.json"
-OUTPUT_FINAL = "freshersworld_scraper/fw_internships.json"
+OUTPUT_DIR   = Path(__file__).resolve().parents[2] / "data" / "scrapers"   # <project>/data/scrapers
+OUTPUT_RAW   = OUTPUT_DIR / "fw_raw.json"
+OUTPUT_FINAL = OUTPUT_DIR / "fw_internships.json"
 
 BASE_URL = "https://www.freshersworld.com"
 
@@ -133,7 +137,7 @@ def setup_driver(headless: bool = True) -> webdriver.Chrome:
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
     if USE_WDM:
-        svc = Service(ChromeDriverManager().install())
+        svc = Service(ChromeDriverManager(cache_manager=DriverCacheManager(root_dir=os.getenv("WDM_CACHE_PATH"))).install())
         driver = webdriver.Chrome(service=svc, options=opts)
     else:
         driver = webdriver.Chrome(options=opts)
@@ -615,6 +619,7 @@ def deduplicate(items: list) -> list:
 # ============================================================================
 def save_json(items: list, path: str):
     try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(json.dumps(items, indent=2, ensure_ascii=False))
         log.info("Saved %d items → %s", len(items), path)

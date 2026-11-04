@@ -196,6 +196,12 @@ def _run_job(job_id: str, scrapers: list[str], skip_scrape: bool, max_values: di
 
         stats = run_pipeline(selected_ids=scrapers, skip_scrape=skip_scrape, max_values=max_values, on_progress=_progress, job_id=job_id)
 
+        try:
+            from core.expiry import expire_internships
+            stats = {**(stats or {}), "expired": expire_internships()}   # move expired listings out of 'internships' and the graph
+        except Exception as exc:
+            log.warning("[job:%s] expiry sweep failed: %s", job_id, exc)
+
         with _jobs_lock:
             _jobs[job_id].update({
                 "status":      "done",

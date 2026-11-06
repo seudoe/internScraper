@@ -209,29 +209,34 @@ def _build_explanation_summary(
     *,
     hard_forced: bool,
     low_conf_forced: bool,
+    flags: dict | None = None,
 ) -> str:
+    flags = flags or {}
     if hard_forced and findings:
         primary = next(
             (f for f in findings if f.rule_id == _HARD_DISQUALIFYING_RULE_ID),
             findings[0],
         )
         return (
-            f"Flagged primarily for {primary.description.lower()} — "
+            f"Flagged for {primary.description.lower()} — "
             f"hard-disqualifying policy forces '{decision}'."
         )
 
     if not findings:
         if low_conf_forced:
-            return (
-                "No strong risk rules fired, but confidence is too low to clear "
-                "this listing automatically; routed to review."
-            )
+            missing_items = []
+            if flags.get("deadline_missing"):
+                missing_items.append("deadline")
+            if flags.get("degree_suspect_default"):
+                missing_items.append("degree requirements")
+            if flags.get("company_suspect"):
+                missing_items.append("verified company domain")
+            if not missing_items:
+                missing_items.append("details")
+            return f"Review required: missing {', '.join(missing_items)}."
         if decision == "clear":
-            return (
-                "No significant risk signals detected; listing appears consistent "
-                "with normal postings."
-            )
-        return f"Decision '{decision}' based on blended score without specific rule triggers."
+            return "Clear: low risk."
+        return f"Decision '{decision}' based on blended score."
 
     # Prefer the highest-weight triggered rules for the sentence
     ordered = sorted(findings, key=lambda f: f.weight, reverse=True)
@@ -248,12 +253,12 @@ def _build_explanation_summary(
     else:
         body = f"{parts[0]} and {parts[1]}"
 
-    prefix = "Flagged primarily for "
+    prefix = "Flagged: "
     summary = prefix + body
     if not summary.endswith("."):
         summary += "."
     if low_conf_forced:
-        summary += " Low confidence forced review rather than clear."
+        summary += " Low confidence forced review."
     return summary
 
 
@@ -384,10 +389,19 @@ class RiskEngine:
             else:
                 decision = "clear"
 
-        # Low-confidence "clear" is misleading — never present as confident clear
+        # Low-confidence "clear" is misleading if real fraud indicators exist.
+        # But for low risk score internships (e.g. scam_score <= 25.0) with no suspect flags,
+        # allow auto-approval even if optional fields (like deadlineDate) are missing.
+        flags = _get_flags(record)
+        has_real_suspect = (
+            bool(flags.get("company_suspect")) or
+            bool(flags.get("typosquat_suspect")) or
+            (anomaly is not None and anomaly > 0.6)
+        )
         if confidence < cfg.confidence.low_below and decision == "clear":
-            decision = "review"
-            low_conf_forced = True
+            if scam_score > 25.0 or has_real_suspect:
+                decision = "review"
+                low_conf_forced = True
 
         level = confidence_level_for(confidence, cfg)
 
@@ -413,6 +427,7 @@ class RiskEngine:
             decision,
             hard_forced=hard_forced,
             low_conf_forced=low_conf_forced,
+            flags=flags,
         )
 
         return ScamScoreResult(

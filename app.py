@@ -224,6 +224,33 @@ def _run_job(job_id: str, scrapers: list[str], skip_scrape: bool, max_values: di
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
+def cleanup_orphaned_runs():
+    try:
+        from datetime import timedelta
+        from core.script import _open_staging
+        client, _ = _open_staging()
+        runs_col = client["ifind"]["scrape.runs"]
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=20)
+        res = runs_col.update_many(
+            {"status": "running", "startedAt": {"$lt": cutoff}},
+            {"$set": {
+                "status": "failed",
+                "finishedAt": datetime.now(timezone.utc),
+                "error": "Run timed out or process was interrupted",
+            }}
+        )
+        if res.modified_count > 0:
+            log.info("Cleaned up %d orphaned scrape runs", res.modified_count)
+        client.close()
+    except Exception as e:
+        log.warning("Could not cleanup orphaned scrape runs: %s", e)
+
+
+@app.on_event("startup")
+def on_startup():
+    cleanup_orphaned_runs()
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

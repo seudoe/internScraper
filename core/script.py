@@ -104,7 +104,7 @@ SCRAPER_REGISTRY = [
         "module":    "scrapers.letsintern_scraper.letsintern_scraper",
         "fn":        "main",
         "source":    "web_scraping",
-        "max_param": None,      # scrapes all URLs it finds; no numeric cap
+        "max_param": "TARGET",
     },
 ]
 
@@ -157,9 +157,15 @@ def run_scraper(scraper: dict, max_items: int = DEFAULT_MAX) -> tuple[list, str 
             # fn accepts max as first positional argument
             result = fn(max_items)
         elif max_param == "TARGET":
-            # patch module-level TARGET before calling main()
-            mod.TARGET = max_items
-            result = fn()
+            # patch module-level TARGET / MAX_ITEMS before calling main()
+            if hasattr(mod, "TARGET"):
+                mod.TARGET = max_items
+            if hasattr(mod, "MAX_ITEMS"):
+                mod.MAX_ITEMS = max_items
+            try:
+                result = fn(max_items)
+            except TypeError:
+                result = fn()
         elif max_param == "PAGES":
             # naukri: ~40 results per page, round up
             pages = max(1, (max_items + 39) // 40)
